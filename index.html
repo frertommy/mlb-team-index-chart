@@ -171,9 +171,33 @@ const chart=createChart(chartEl,{
 });
 const candle=chart.addSeries(CandlestickSeries,{upColor:"#B2ED68",downColor:"#B30F43",borderVisible:false,wickUpColor:"#B2ED68",wickDownColor:"#B30F43"});
 const line=chart.addSeries(LineSeries,{color:"#B2ED68",lineWidth:2});line.applyOptions({visible:false});
+// Forward win/loss target rails: horizontal dashed segments that start at the last
+// game's settlement and project to the right edge (not full-width price lines).
+function makeTargets(){
+  let api=null,data=null; // {x0Time, win, loss}
+  const draw=(target)=>{ if(!api||!data)return; target.useBitmapCoordinateSpace(scope=>{
+    const ctx=scope.context,hpr=scope.horizontalPixelRatio,vpr=scope.verticalPixelRatio,W=scope.bitmapSize.width,ts=api.chart.timeScale(),series=api.series;
+    const x0c=ts.timeToCoordinate(data.x0Time); if(x0c===null)return;
+    const x0=Math.max(0,Math.round(x0c*hpr)), x1=W; if(x0>=x1)return;
+    ctx.save();
+    const seg=(price,color,label)=>{const yc=series.priceToCoordinate(price);if(yc===null)return;const y=Math.round(yc*vpr)+0.5;
+      ctx.setLineDash([4*hpr,4*hpr]);ctx.lineWidth=Math.max(1,Math.round(hpr));ctx.strokeStyle=color;
+      ctx.beginPath();ctx.moveTo(x0,y);ctx.lineTo(x1,y);ctx.stroke();
+      ctx.setLineDash([]);ctx.font=`${10*hpr}px ui-monospace, Menlo, monospace`;ctx.textBaseline='middle';ctx.textAlign='left';
+      const tw=ctx.measureText(label).width,padX=5*hpr,h=15*hpr,bw=tw+padX*2,bx=x1-bw-2*hpr;
+      ctx.fillStyle=color;ctx.fillRect(bx,y-h/2,bw,h);
+      ctx.fillStyle='#0C0E12';ctx.fillText(label,bx+padX,y);};
+    seg(data.win,'#B2ED68',`WIN ${data.win.toFixed(2)}`);
+    seg(data.loss,'#D4135A',`LOSS ${data.loss.toFixed(2)}`);
+    ctx.restore();});};
+  const view={renderer(){return {draw};},zOrder(){return 'top';}};
+  return {attached(p){api=p;},detached(){api=null;},updateAllViews(){},paneViews(){return [view];},
+    setData(d){data=d;if(api&&api.requestUpdate)api.requestUpdate();}};
+}
+
 const markersPrimitive=createSeriesMarkers(candle,[]);
 const vlines=makeVLines();candle.attachPrimitive(vlines);
-let priceLines=[];
+const targets=makeTargets();candle.attachPrimitive(targets);
 
 let PRICES={},GAMES={},NEXT={};
 let team=null,resolution="60",chartType="candle",bars=[];
@@ -185,7 +209,13 @@ const resSec=()=>TF.find(o=>o.value===resolution).seconds;
 const fmtP=(p)=>p==null?'—':p.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
 const fmtT=(t)=>new Date(t*1000).toLocaleString(undefined,{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});
 
-function clearPriceLines(){priceLines.forEach(l=>{try{candle.removePriceLine(l);}catch(_){}});priceLines=[];}
+function applyTargets(){
+  if(!showSetup){targets.setData(null);return;}
+  const s=stats(team); if(s.last==null){targets.setData(null);return;}
+  const x0=periods.length?periods[periods.length-1].bt:(bars.length?bars[bars.length-1].time:null);
+  if(x0==null){targets.setData(null);return;}
+  targets.setData({x0Time:x0,win:s.last+s.medWin,loss:s.last+s.medLoss});
+}
 
 function stats(t){
   const g=GAMES[t]||[],tk=PRICES[t]||[];
@@ -271,11 +301,7 @@ function render(){
 
   buildMarkers();buildStrip();syncStripSel();updateReadout();
 
-  // targets
-  clearPriceLines();
-  if(showSetup&&s.last!=null){const winT=s.last+s.medWin,lossT=s.last+s.medLoss;
-    priceLines.push(candle.createPriceLine({price:winT,color:'#B2ED68',lineWidth:1,lineStyle:2,axisLabelVisible:true,title:`WIN ⌃ ${fmtP(winT)}`}));
-    priceLines.push(candle.createPriceLine({price:lossT,color:'#D4135A',lineWidth:1,lineStyle:2,axisLabelVisible:true,title:`LOSS ⌄ ${fmtP(lossT)}`}));}
+  applyTargets();
 
   // header
   document.getElementById('st-price').textContent='$'+fmtP(s.last);
@@ -354,8 +380,7 @@ const tog=(id,get,set)=>{const b=document.getElementById(id);b.onclick=()=>{set(
 tog('btn-games',()=>showGames,v=>showGames=v);
 const bD=document.getElementById('btn-details');bD.onclick=()=>{showDetails=!showDetails;bD.className='tool tf'+(showDetails?' active-green':'');buildMarkers();};
 tog('btn-lines',()=>showLines,v=>showLines=v);
-const bS=document.getElementById('btn-setup');bS.onclick=()=>{showSetup=!showSetup;bS.className='tool tf'+(showSetup?' active-green':'');
-  clearPriceLines();if(showSetup){const s=stats(team);if(s.last!=null){priceLines.push(candle.createPriceLine({price:s.last+s.medWin,color:'#B2ED68',lineWidth:1,lineStyle:2,axisLabelVisible:true,title:`WIN ⌃ ${fmtP(s.last+s.medWin)}`}));priceLines.push(candle.createPriceLine({price:s.last+s.medLoss,color:'#D4135A',lineWidth:1,lineStyle:2,axisLabelVisible:true,title:`LOSS ⌄ ${fmtP(s.last+s.medLoss)}`}));}}};
+const bS=document.getElementById('btn-setup');bS.onclick=()=>{showSetup=!showSetup;bS.className='tool tf'+(showSetup?' active-green':'');applyTargets();};
 
 // contextual zoom-out: visible only when zoomed in tighter than the default overview
 const zoomOutBtn=document.getElementById('zoomout');
