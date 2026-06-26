@@ -112,6 +112,7 @@
       <button class="tool tf" id="btn-details" title="Show score labels">＋ Details</button>
       <button class="tool active-green tf" id="btn-lines" title="Game divider lines">▏ Dividers</button>
       <button class="tool active-green tf" id="btn-setup" title="Next-game win/loss targets">◎ Targets</button>
+      <button class="tool tf" id="btn-next" title="Zoom to the upcoming game" style="color:var(--cyan)">▸ Next game</button>
     </div>
     <div id="readout"></div>
   </div>
@@ -182,6 +183,10 @@ const chart=createChart(chartEl,{
   timeScale:{borderColor:"rgba(42,48,56,1)",timeVisible:true,secondsVisible:false,barSpacing:12,minBarSpacing:0.5,rightBarStaysOnScroll:true},
 });
 const candle=chart.addSeries(CandlestickSeries,{upColor:"#B2ED68",downColor:"#B30F43",borderVisible:false,wickUpColor:"#B2ED68",wickDownColor:"#B30F43"});
+// pull the win/loss targets into the price-axis autoscale when they're near the visible candles (so the corridor is fully framed)
+candle.applyOptions({autoscaleInfoProvider:(orig)=>{const res=orig();if(res&&res.priceRange&&curWin!=null&&curLoss!=null){const r=res.priceRange,h=(r.maxValue-r.minValue)||1;
+  if(curWin<=r.maxValue+h&&curWin>=r.minValue-h)r.maxValue=Math.max(r.maxValue,curWin);
+  if(curLoss>=r.minValue-h&&curLoss<=r.maxValue+h)r.minValue=Math.min(r.minValue,curLoss);}return res;}});
 const line=chart.addSeries(LineSeries,{color:"#B2ED68",lineWidth:2});line.applyOptions({visible:false});
 // Inter-game window: 2 dividers from the PREVIOUS game's settlement to the NEXT game's
 // projected settlement, framing a cyan band, with win/loss target rails across it.
@@ -235,7 +240,7 @@ const vlines=makeVLines();candle.attachPrimitive(vlines);
 const targets=makeTargets();candle.attachPrimitive(targets);
 
 let PRICES={},GAMES={},NEXT={},ODDS={},TARGETS={};
-let team=null,resolution="60",chartType="candle",bars=[],seriesLogicalCount=0;
+let team=null,resolution="60",chartType="candle",bars=[],seriesLogicalCount=0,curWin=null,curLoss=null;
 let showGames=true,showDetails=false,showLines=true,showSetup=true;
 let periods=[]; // in-range games with bucket time + period bounds
 let periodByBt=new Map();
@@ -245,16 +250,17 @@ const fmtP=(p)=>p==null?'—':p.toLocaleString(undefined,{minimumFractionDigits:
 const fmtT=(t)=>new Date(t*1000).toLocaleString(undefined,{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});
 
 function applyTargets(){
-  if(!showSetup){targets.setData(null);return;}
-  const s=stats(team); if(s.last==null){targets.setData(null);return;}
+  if(!showSetup){curWin=curLoss=null;targets.setData(null);return;}
+  const s=stats(team); if(s.last==null){curWin=curLoss=null;targets.setData(null);return;}
   const prevSettle=periods.length?periods[periods.length-1].bt:(bars.length?bars[bars.length-1].time:null);
-  if(prevSettle==null){targets.setData(null);return;}
+  if(prevSettle==null){curWin=curLoss=null;targets.setData(null);return;}
+  curWin=s.last+s.medWin;curLoss=s.last+s.medLoss;
   const nx=NEXT[team];let endT=null,opp=null;
   if(nx){const sec=resSec();endT=Math.floor((nx.t+NEXT_SETTLE_OFFSET)/sec)*sec;opp=(nx.home?'vs ':'@ ')+ab(nx.opp);}
   // odds: snap to the bar grid (so timeToCoordinate resolves) + keep the recent window; plotted at real time
   let odds=null;const os=ODDS[team]?.series;
-  if(os&&os.length){const sec=resSec();const cutoff=(bars.length?bars[bars.length-1].time:0)-48*3600;const m=new Map();
-    for(const [t,p] of os){if(t<cutoff)continue;m.set(Math.floor(t/sec)*sec,p);} odds=[...m.entries()].sort((a,b)=>a[0]-b[0]);}
+  if(os&&os.length){const sec=resSec();const m=new Map();   // start the prob line at the corridor's left divider (prev settlement)
+    for(const [t,p] of os){if(t<prevSettle)continue;m.set(Math.floor(t/sec)*sec,p);} odds=[...m.entries()].sort((a,b)=>a[0]-b[0]);}
   targets.setData({startT:prevSettle,endT,win:s.last+s.medWin,loss:s.last+s.medLoss,opp,odds});
 }
 
@@ -323,7 +329,7 @@ function render(){
   const ohlc=bars.map(c=>({time:c.time,open:c.open,high:c.high,low:c.low,close:c.close}));
   const nxg=NEXT[team];
   if(nxg&&bars.length){const endT=nxg.t+NEXT_SETTLE_OFFSET,lastT=bars[bars.length-1].time,sec=resSec();
-    if(endT>lastT)for(let tt=lastT+sec;tt<=endT+sec;tt+=sec)ohlc.push({time:tt});}
+    if(endT>lastT)for(let tt=lastT+sec;tt<=endT+3*sec;tt+=sec)ohlc.push({time:tt});}
   seriesLogicalCount=ohlc.length;
   candle.setData(ohlc);
   if(chartType==='line')line.setData(bars.map(c=>({time:c.time,value:c.close})));
@@ -439,6 +445,17 @@ tog('btn-games',()=>showGames,v=>showGames=v);
 const bD=document.getElementById('btn-details');bD.onclick=()=>{showDetails=!showDetails;bD.className='tool tf'+(showDetails?' active-green':'');buildMarkers();};
 tog('btn-lines',()=>showLines,v=>showLines=v);
 const bS=document.getElementById('btn-setup');bS.onclick=()=>{showSetup=!showSetup;bS.className='tool tf'+(showSetup?' active-green':'');applyTargets();};
+function focusNextGame(){
+  const nx=NEXT[team]; if(!nx||!bars.length) return;
+  if(!showSetup){showSetup=true;bS.className='tool tf active-green';applyTargets();} // ensure the corridor is visible
+  selIdx=-1;hideTip(true);syncStripSel();updateReadout();
+  const sec=resSec();
+  const ns=Math.floor((nx.t+NEXT_SETTLE_OFFSET)/sec)*sec;
+  const ps=periods.length?periods[periods.length-1].bt:bars[bars.length-1].time;
+  chart.timeScale().setVisibleRange({from:ps-12*3600,to:ns+3*3600});
+  updateZoomOutVis();
+}
+document.getElementById('btn-next').onclick=focusNextGame;
 
 // contextual zoom-out: visible only when zoomed in tighter than the default overview
 const zoomOutBtn=document.getElementById('zoomout');
