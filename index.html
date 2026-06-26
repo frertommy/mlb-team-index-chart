@@ -131,28 +131,21 @@ function priceAt(ticks,t){let lo=0,hi=ticks.length-1,res=null;while(lo<=hi){cons
 function makeVLines(){
   // entries: [{t, won, opp, date}] — flag + label at the top, faint full-height guide.
   let api=null,entries=[],hoverT=null,guideColor='rgba(236,238,242,0.32)';
-  const drawGuides=(target)=>{ if(!api)return; target.useBitmapCoordinateSpace(scope=>{
+  // single full-height guide — only for the hovered game (no always-on lines)
+  const drawGuides=(target)=>{ if(!api||hoverT==null)return; target.useBitmapCoordinateSpace(scope=>{
     const ctx=scope.context,hpr=scope.horizontalPixelRatio,h=scope.bitmapSize.height,ts=api.chart.timeScale();
-    ctx.save();ctx.setLineDash([]);ctx.lineWidth=Math.max(1,Math.round(hpr));
-    for(const e of entries){const x=ts.timeToCoordinate(e.t);if(x===null)continue;const xb=Math.round(x*hpr)+0.5;
-      ctx.strokeStyle=(e.t===hoverT)?(e.won?'rgba(178,237,104,0.6)':'rgba(212,19,90,0.6)'):guideColor;
-      ctx.beginPath();ctx.moveTo(xb,0);ctx.lineTo(xb,h);ctx.stroke();}
-    ctx.restore();});};
+    const x=ts.timeToCoordinate(hoverT);if(x===null)return;const xb=Math.round(x*hpr)+0.5;
+    ctx.save();ctx.setLineDash([]);ctx.lineWidth=Math.max(1,Math.round(hpr));ctx.strokeStyle='rgba(236,238,242,0.45)';
+    ctx.beginPath();ctx.moveTo(xb,0);ctx.lineTo(xb,h);ctx.stroke();ctx.restore();});};
+  // top pennants only (opponent/date now live in the hover popup, not on the chart)
   const drawFlags=(target)=>{ if(!api)return; target.useBitmapCoordinateSpace(scope=>{
     const ctx=scope.context,hpr=scope.horizontalPixelRatio,ts=api.chart.timeScale();
-    ctx.save();const w=3.5*hpr,stem=7*hpr,minGap=40*hpr;let lastLabelXb=-1e9;
-    ctx.textAlign='center';ctx.textBaseline='top';
+    ctx.save();const w=3.5*hpr,stem=7*hpr;
     for(const e of entries){const x=ts.timeToCoordinate(e.t);if(x===null)continue;const xb=Math.round(x*hpr)+0.5;
       const col=e.won?'#B2ED68':'#D4135A';
       ctx.fillStyle=col;ctx.strokeStyle=col;ctx.lineWidth=Math.max(1,Math.round(hpr));
-      ctx.globalAlpha=0.6;ctx.beginPath();ctx.moveTo(xb,0);ctx.lineTo(xb,stem);ctx.stroke();        // stem
-      ctx.globalAlpha=1;ctx.beginPath();ctx.moveTo(xb,0);ctx.lineTo(xb+w*2,0);ctx.lineTo(xb,w*1.8);ctx.closePath();ctx.fill(); // pennant
-      if(e.opp && xb-lastLabelXb>minGap){   // opponent + date label, only where there's room
-        ctx.font=`${9*hpr}px ui-monospace, Menlo, monospace`;
-        ctx.fillStyle=col;ctx.fillText(e.opp,xb,stem+3*hpr);
-        ctx.fillStyle='rgba(150,158,170,0.95)';ctx.fillText(e.date,xb,stem+3*hpr+11*hpr);
-        lastLabelXb=xb;
-      }}
+      ctx.globalAlpha=0.6;ctx.beginPath();ctx.moveTo(xb,0);ctx.lineTo(xb,stem);ctx.stroke();
+      ctx.globalAlpha=1;ctx.beginPath();ctx.moveTo(xb,0);ctx.lineTo(xb+w*2,0);ctx.lineTo(xb,w*1.8);ctx.closePath();ctx.fill();}
     ctx.restore();});};
   const guideView={renderer(){return {draw:drawGuides};},zOrder(){return 'bottom';}};
   const flagView={renderer(){return {draw:drawFlags};},zOrder(){return 'top';}};
@@ -181,9 +174,7 @@ function makeTargets(){
     const xc=(t)=>{if(t==null)return null;const c=ts.timeToCoordinate(t);return c===null?null:c*hpr;};
     const xs=xc(d.startT),xe=xc(d.endT);
     ctx.save();
-    // band spanning prev-settle → next-settle (outcome of next game unknown → neutral cyan)
-    if(xs!=null&&xe!=null&&xe>xs){ctx.fillStyle='rgba(0,217,245,0.06)';ctx.fillRect(Math.round(xs),0,Math.round(xe-xs),H);}
-    // win/loss rails across the band (fallback end: right edge)
+    // win/loss rails across the inter-game window (fallback end: right edge)
     const railEnd=(xe!=null?xe:W),railStart=(xs!=null?Math.max(0,xs):0);
     const seg=(price,color,label)=>{const yc=series.priceToCoordinate(price);if(yc===null)return;const y=Math.round(yc*vpr)+0.5;
       ctx.setLineDash([4*hpr,4*hpr]);ctx.lineWidth=Math.max(1,Math.round(hpr));ctx.strokeStyle=color;
@@ -380,8 +371,10 @@ chart.subscribeClick((param)=>{
 // crosshair: hover card on a game column + price readout
 chart.subscribeCrosshairMove((param)=>{
   if(param.point&&param.time!=null&&periods.length){
-    const idx=periodByBt.get(param.time);
-    if(idx!=null){cancelHide();if(idx!==tipIdx)showTip(idx);} else hideTip(false);
+    // nearest game within ±12h of the cursor → show its guide line + popup
+    const t=param.time;let idx=-1,best=Infinity;
+    for(let i=0;i<periods.length;i++){const dd=Math.abs(periods[i].bt-t);if(dd<best){best=dd;idx=i;}}
+    if(idx>=0&&best<=12*3600){cancelHide();if(idx!==tipIdx)showTip(idx);} else hideTip(false);
   } else hideTip(false);
   const r=document.getElementById('readout');if(selIdx>=0)return;
   const d=param.time?param.seriesData.get(candle):null;
