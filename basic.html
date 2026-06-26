@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>tail.trade chart — MLB2026 team pricing</title>
+<script src="https://unpkg.com/lightweight-charts@5.0.8/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+  :root {
+    --bg-primary:#0C0E12; --bg-secondary:#0f1419; --bg-tertiary:#1a1f26; --bg-hover:#1f252e;
+    --border:#2a3038; --text-primary:#e6e8eb; --text-secondary:#8c919a; --text-muted:#5c6370;
+    --green:#B2ED68; --green-light:#C4F285; --red:#B30F43; --red-light:#D4135A; --cyan:#00d9f5;
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:var(--bg-primary); color:var(--text-primary);
+    font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; }
+  body { display:flex; align-items:center; justify-content:center; padding:24px; }
+  #wrap { display:flex; flex-direction:column; overflow:hidden; width:min(1320px,100%); height:min(680px,92vh);
+    border:1px solid var(--border); border-radius:8px; background:var(--bg-primary); }
+  #wrap.fullscreen { position:fixed; inset:0; width:100%; height:100%; max-width:none; border-radius:0; z-index:9999; }
+
+  /* market header strip (mirrors tail.trade) */
+  #mkt { display:flex; align-items:center; gap:22px; padding:10px 14px; border-bottom:1px solid var(--border); flex-shrink:0; }
+  #team-select { background:var(--bg-tertiary); color:var(--text-primary); border:1px solid var(--border);
+    border-radius:6px; padding:7px 10px; font:inherit; font-size:14px; font-weight:600; min-width:210px; cursor:pointer; }
+  .stat { display:flex; flex-direction:column; gap:2px; }
+  .stat .lbl { font-size:10px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; }
+  .stat .val { font-size:14px; font-variant-numeric:tabular-nums; }
+  .up { color:var(--green); } .down { color:var(--red-light); }
+
+  /* toolbar */
+  #toolbar { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 12px;
+    border-bottom:1px solid var(--border); background:var(--bg-primary); flex-shrink:0; }
+  .group { display:flex; align-items:center; gap:2px; }
+  .left { gap:8px; }
+  button.tool { background:transparent; border:none; cursor:pointer; color:var(--text-muted); padding:5px 7px;
+    border-radius:4px; font:inherit; font-size:12px; line-height:1; display:inline-flex; align-items:center; gap:4px; transition:all .12s; }
+  button.tool:hover { color:var(--text-primary); background:var(--bg-hover); }
+  button.tool.active-green { background:rgba(178,237,104,.2); color:var(--green); }
+  button.tool.active-cyan  { background:rgba(0,217,245,.2);  color:var(--cyan); }
+  .tf { padding:4px 10px; font-weight:500; }
+  .icon { width:14px; height:14px; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+  .badge { background:rgba(178,237,104,.3); color:var(--green); border-radius:4px; font-size:10px; font-weight:700; padding:1px 4px; }
+  .ind-wrap { position:relative; }
+  #ind-menu { position:absolute; top:100%; left:0; margin-top:4px; width:210px; background:var(--bg-secondary);
+    border:1px solid var(--border); border-radius:8px; box-shadow:0 10px 30px rgba(0,0,0,.5); z-index:50; display:none; }
+  #ind-menu.open { display:block; }
+  .ind-head { padding:8px 12px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; font-size:12px; color:var(--text-primary); }
+  .ind-clear { background:none; border:none; color:var(--text-muted); cursor:pointer; font:inherit; font-size:12px; }
+  .ind-list { max-height:240px; overflow-y:auto; padding:4px 0; }
+  .ind-item { width:100%; display:flex; justify-content:space-between; align-items:center; background:none; border:none;
+    cursor:pointer; color:var(--text-muted); font:inherit; font-size:12px; padding:6px 12px; }
+  .ind-item:hover { color:var(--text-primary); background:var(--bg-hover); }
+  .ind-item.on { background:rgba(178,237,104,.1); color:var(--green); }
+  .dot { width:6px; height:6px; border-radius:50%; background:var(--green); }
+  .right { color:var(--text-muted); }
+  #ohlc { display:flex; gap:8px; font-size:10px; line-height:1.1; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
+  #ohlc .mono { font-variant-numeric:tabular-nums; }
+  .c-time { color:var(--text-muted); max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .c-o { color:var(--text-primary); } .c-h { color:var(--green); } .c-l { color:var(--red-light); }
+  #chart { flex:1; min-height:0; width:100%; position:relative; }
+  #chart a#tv-attr-logo { display:none !important; }
+  #status { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--text-muted); font-size:13px; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <!-- market header -->
+  <div id="mkt">
+    <select id="team-select" title="MLB team market"></select>
+    <div class="stat"><span class="lbl">Price</span><span class="val" id="st-price">—</span></div>
+    <div class="stat"><span class="lbl">Range Change</span><span class="val" id="st-chg">—</span></div>
+    <div class="stat"><span class="lbl">High</span><span class="val" id="st-high">—</span></div>
+    <div class="stat"><span class="lbl">Low</span><span class="val" id="st-low">—</span></div>
+    <div class="stat"><span class="lbl">Ticks</span><span class="val" id="st-ticks">—</span></div>
+  </div>
+
+  <!-- toolbar -->
+  <div id="toolbar">
+    <div class="group left">
+      <div class="group" style="background:var(--bg-primary); border-radius:4px; padding:2px;">
+        <button class="tool active-green" id="btn-candle" title="Candlestick"><svg class="icon" viewBox="0 0 24 24"><path d="M9 5v4M9 15v4M7 9h4v6H7zM17 3v4M17 17v4M15 7h4v10h-4z"/></svg></button>
+        <button class="tool" id="btn-line" title="Line"><svg class="icon" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/></svg></button>
+      </div>
+      <div class="group" id="tf-group"></div>
+      <div class="ind-wrap">
+        <button class="tool tf" id="btn-ind"><svg class="icon" viewBox="0 0 24 24"><path d="M3 3v18h18M7 16l4-4 3 3 5-6"/></svg><span>Indicators</span><span class="badge" id="ind-count" style="display:none">0</span><svg class="icon" id="ind-chev" style="width:12px;height:12px" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
+        <div id="ind-menu"><div class="ind-head"><span>Technical Indicators</span><button class="ind-clear" id="ind-clear" style="display:none">Clear all</button></div><div class="ind-list" id="ind-list"></div></div>
+      </div>
+    </div>
+    <div class="group right">
+      <div id="ohlc"></div>
+      <div class="group">
+        <button class="tool" id="btn-fs" title="Fullscreen"><svg class="icon" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>
+      </div>
+    </div>
+  </div>
+  <div id="chart"><div id="status">Loading MLB2026 price history…</div></div>
+</div>
+
+<script>
+const LWC = window.LightweightCharts;
+const { createChart, ColorType, CandlestickSeries, LineSeries, HistogramSeries, TickMarkType } = LWC;
+
+const TIMEFRAME_OPTIONS = [
+  { value:"1", label:"1m", seconds:60 },
+  { value:"5", label:"5m", seconds:300 },
+  { value:"15", label:"15m", seconds:900 },
+  { value:"60", label:"1h", seconds:3600 },
+];
+const AVAILABLE_INDICATORS = ['RSI','MACD','EMA','SMA','Bollinger Bands','Volume','Stochastic'];
+const MAX_GAP_CANDLES = 8;
+
+function fifteenMinuteTickFormatter(time, tickMarkType, locale) {
+  if (tickMarkType !== TickMarkType.Time && tickMarkType !== TickMarkType.TimeWithSeconds) return null;
+  if (typeof time !== "number") return null;
+  const d = new Date(time*1000); const mins = d.getHours()*60 + d.getMinutes();
+  if (mins % 90 !== 0) return "";
+  return d.toLocaleTimeString(locale, { hour:"2-digit", minute:"2-digit", hour12:false });
+}
+function applyTimeScalePresentation(chart, resolution) {
+  chart.applyOptions({ timeScale: { barSpacing:12, minBarSpacing:0.5,
+    tickMarkFormatter: resolution === "15" ? fifteenMinuteTickFormatter : () => null } });
+}
+
+// ── Bucket raw [unixSec, price] ticks into OHLC at a resolution ──────────────
+// Mirrors production processMarketCandles: snap → OHLC → link opens → gap-fill.
+function bucketTicks(ticks, sec) {
+  const map = new Map();
+  for (const [t, p] of ticks) {
+    const b = Math.floor(t / sec) * sec;
+    const c = map.get(b);
+    if (!c) map.set(b, { time:b, open:p, high:p, low:p, close:p });
+    else { if (p > c.high) c.high = p; if (p < c.low) c.low = p; c.close = p; }
+  }
+  const arr = Array.from(map.values()).sort((a,b)=>a.time-b.time);
+  for (let i=1;i<arr.length;i++){ const o = arr[i-1].close; arr[i].open = o; if(o>arr[i].high)arr[i].high=o; if(o<arr[i].low)arr[i].low=o; }
+  const filled = [];
+  for (let i=0;i<arr.length;i++){
+    filled.push(arr[i]);
+    if (i < arr.length-1){
+      const gaps = Math.round((arr[i+1].time - arr[i].time)/sec) - 1;
+      if (gaps>0 && gaps<=MAX_GAP_CANDLES) for (let g=1;g<=gaps;g++){ const tt=arr[i].time+g*sec;
+        filled.push({ time:tt, open:arr[i].close, high:arr[i].close, low:arr[i].close, close:arr[i].close }); }
+    }
+  }
+  return filled;
+}
+
+// ── Chart (EXACT tail.trade createChart options) ────────────────────────────
+const chartEl = document.getElementById('chart');
+const chart = createChart(chartEl, {
+  layout: { background:{ type:ColorType.Solid, color:"transparent" }, textColor:"#8c919a", attributionLogo:false },
+  localization: { timeFormatter:(t)=>new Date(t*1000).toLocaleString(undefined,
+    { month:'short', day:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit', hour12:false }) },
+  grid: { vertLines:{ color:"rgba(42, 48, 56, 0.8)" }, horzLines:{ color:"rgba(42, 48, 56, 0.8)" } },
+  rightPriceScale: { borderColor:"rgba(42, 48, 56, 1)" },
+  timeScale: { borderColor:"rgba(42, 48, 56, 1)", timeVisible:true, secondsVisible:false, barSpacing:12, minBarSpacing:0.5, rightBarStaysOnScroll:true },
+});
+const candleSeries = chart.addSeries(CandlestickSeries, { upColor:"#B2ED68", downColor:"#B30F43", borderVisible:false, wickUpColor:"#B2ED68", wickDownColor:"#B30F43" });
+const lineSeries = chart.addSeries(LineSeries, { color:"#B2ED68", lineWidth:2, priceLineVisible:true, lastValueVisible:true, crosshairMarkerVisible:true });
+lineSeries.applyOptions({ visible:false });
+
+// ── State ───────────────────────────────────────────────────────────────────
+let PRICES = {};              // team -> [[unixSec, price], ...]
+let team = null;
+let resolution = "60";        // default 1h (MLB ticks are sparse ~1 / 8-12 min)
+let chartType = "candle";
+const selectedIndicators = new Set();
+const indicatorSeries = new Map();
+let bars = [];
+
+const resSeconds = () => TIMEFRAME_OPTIONS.find(o=>o.value===resolution).seconds;
+const fmtP = (p)=>p.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+const fmtT = (t)=>new Date(t*1000).toLocaleString(undefined,{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});
+
+function render() {
+  const ticks = PRICES[team] || [];
+  bars = bucketTicks(ticks, resSeconds());
+  candleSeries.setData(bars.map(c=>({time:c.time,open:c.open,high:c.high,low:c.low,close:c.close})));
+  if (chartType==='line') lineSeries.setData(bars.map(c=>({time:c.time,value:c.close})));
+  rebuildIndicators();
+  // formatter first, then fitContent LAST so the full history is visible (don't let barSpacing override the fit)
+  applyTimeScalePresentation(chart, resolution);
+  chart.timeScale().fitContent();
+  // header stats
+  if (bars.length) {
+    const first = bars[0].open, last = bars[bars.length-1].close;
+    const hi = Math.max(...bars.map(b=>b.high)), lo = Math.min(...bars.map(b=>b.low));
+    const chg = ((last-first)/first)*100;
+    document.getElementById('st-price').textContent = '$'+fmtP(last);
+    const chgEl = document.getElementById('st-chg');
+    chgEl.textContent = (chg>=0?'+':'')+chg.toFixed(2)+'%'; chgEl.className = 'val '+(chg>=0?'up':'down');
+    document.getElementById('st-high').textContent = '$'+fmtP(hi);
+    document.getElementById('st-low').textContent = '$'+fmtP(lo);
+    document.getElementById('st-ticks').textContent = ticks.length.toLocaleString();
+  }
+}
+
+// ── Crosshair OHLC ───────────────────────────────────────────────────────────
+const ohlcEl = document.getElementById('ohlc');
+chart.subscribeCrosshairMove((param)=>{
+  const d = param.time ? param.seriesData.get(candleSeries) : null;
+  if (!d || param.point?.x < 0) { ohlcEl.innerHTML=''; return; }
+  const up = d.close>=d.open;
+  ohlcEl.innerHTML = `<span class="c-time">Time:${fmtT(d.time)}</span>`+
+    `<span class="mono c-o">O: ${fmtP(d.open)}</span><span class="mono c-h">H: ${fmtP(d.high)}</span>`+
+    `<span class="mono c-l">L: ${fmtP(d.low)}</span>`+
+    `<span class="mono" style="color:${up?'var(--green)':'var(--red-light)'}">C: ${fmtP(d.close)}</span>`;
+});
+
+// ── Indicator math (verbatim from CandleChart.tsx) ──────────────────────────
+const SMA=(p,n)=>p.map((_,i)=>i<n-1?NaN:p.slice(i-n+1,i+1).reduce((a,b)=>a+b,0)/n);
+function EMA(p,n){const k=2/(n+1);const r=[];let e=p[0];for(let i=0;i<p.length;i++){e=i===0?p[i]:(p[i]-e)*k+e;r.push(i<n-1?NaN:e);}return r;}
+function RSI(p,n=14){const r=new Array(n).fill(NaN),g=[],l=[];for(let i=1;i<p.length;i++){const d=p[i]-p[i-1];g.push(d>0?d:0);l.push(d<0?-d:0);}for(let i=n;i<p.length;i++){const ag=g.slice(i-n,i).reduce((a,b)=>a+b,0)/n,al=l.slice(i-n,i).reduce((a,b)=>a+b,0)/n;r.push(al===0?100:100-100/(1+ag/al));}return r;}
+function MACD(p,f=12,s=26,sig=9){const fe=EMA(p,f),se=EMA(p,s);const m=fe.map((x,i)=>x-se[i]);const vm=m.filter(v=>!isNaN(v));const sl=EMA(vm,sig);const ps=new Array(m.length-vm.length).fill(NaN).concat(sl);const h=m.map((x,i)=>isNaN(x)?NaN:x-(ps[i]??0));return{macd:m,signal:ps,histogram:h};}
+function BB(p,n=20,sd=2){const sma=SMA(p,n),up=[],mid=[],lo=[];for(let i=0;i<p.length;i++){if(i<n-1){up.push(NaN);mid.push(NaN);lo.push(NaN);continue;}const sl=p.slice(i-n+1,i+1),mean=sma[i],s=Math.sqrt(sl.reduce((a,x)=>a+(x-mean)**2,0)/n);mid.push(mean);up.push(mean+s*sd);lo.push(mean-s*sd);}return{upper:up,middle:mid,lower:lo};}
+function STOCH(c,n=14){const k=[];for(let i=0;i<c.length;i++){if(i<n-1){k.push(NaN);continue;}const sl=c.slice(i-n+1,i+1),hi=Math.max(...sl.map(x=>x.high)),lo=Math.min(...sl.map(x=>x.low));k.push(hi===lo?50:((c[i].close-lo)/(hi-lo))*100);}const d=SMA(k.map(v=>isNaN(v)?0:v),3);return{k,d};}
+const volData=(len)=>Array.from({length:len},()=>1_000_000*(0.5+Math.random()));
+
+function rebuildIndicators(){
+  indicatorSeries.forEach(list=>list.forEach(s=>{try{chart.removeSeries(s);}catch(_){}}));
+  indicatorSeries.clear();
+  if (selectedIndicators.size===0 || !bars.length) return;
+  const prices = bars.map(c=>c.close), times = bars.map(c=>c.time);
+  const map=(vals)=>vals.map((v,i)=>({time:times[i],value:v})).filter(d=>!isNaN(d.value)&&isFinite(d.value));
+  const pf=(prec)=>({type:'price',precision:prec,minMove:prec===2?0.01:0.0001});
+  if (selectedIndicators.has('EMA')){const s=chart.addSeries(LineSeries,{color:'#ff6b6b',lineWidth:1,title:'EMA(20)',priceFormat:pf(4)});s.setData(map(EMA(prices,20)));indicatorSeries.set('EMA',[s]);}
+  if (selectedIndicators.has('SMA')){const s=chart.addSeries(LineSeries,{color:'#4ecdc4',lineWidth:1,title:'SMA(50)',priceFormat:pf(4)});s.setData(map(SMA(prices,50)));indicatorSeries.set('SMA',[s]);}
+  if (selectedIndicators.has('Bollinger Bands')){const b=BB(prices,20,2);const u=chart.addSeries(LineSeries,{color:'#9c27b0',lineWidth:1,title:'BB Upper',priceFormat:pf(4)});u.setData(map(b.upper));const m=chart.addSeries(LineSeries,{color:'#673ab7',lineWidth:1,title:'BB Middle',priceFormat:pf(4)});m.setData(map(b.middle));const l=chart.addSeries(LineSeries,{color:'#9c27b0',lineWidth:1,title:'BB Lower',priceFormat:pf(4)});l.setData(map(b.lower));indicatorSeries.set('Bollinger Bands',[u,m,l]);}
+  if (selectedIndicators.has('RSI')){const s=chart.addSeries(LineSeries,{color:'#ffe66d',lineWidth:1,title:'RSI(14)',priceScaleId:'rsi',priceFormat:pf(2)});s.setData(map(RSI(prices,14)));indicatorSeries.set('RSI',[s]);chart.priceScale('rsi').applyOptions({scaleMargins:{top:0.8,bottom:0}});}
+  if (selectedIndicators.has('Volume')){const vd=volData(prices.length);const s=chart.addSeries(HistogramSeries,{color:'#26a69a',priceFormat:{type:'volume'},priceScaleId:'volume'});s.setData(times.map((t,i)=>({time:t,value:vd[i],color:'#26a69a80'})));indicatorSeries.set('Volume',[s]);chart.priceScale('volume').applyOptions({scaleMargins:{top:0.8,bottom:0}});}
+  if (selectedIndicators.has('MACD')){const md=MACD(prices);const ml=chart.addSeries(LineSeries,{color:'#2196F3',lineWidth:1,title:'MACD',priceScaleId:'macd',priceFormat:pf(4)});ml.setData(map(md.macd));const sl=chart.addSeries(LineSeries,{color:'#FF9800',lineWidth:1,title:'Signal',priceScaleId:'macd',priceFormat:pf(4)});sl.setData(map(md.signal));const h=chart.addSeries(HistogramSeries,{priceScaleId:'macd',priceFormat:pf(4)});h.setData(md.histogram.map((v,i)=>({time:times[i],value:v,color:v>=0?'#B2ED6880':'#B30F4380'})).filter(d=>!isNaN(d.value)&&isFinite(d.value)));indicatorSeries.set('MACD',[ml,sl,h]);chart.priceScale('macd').applyOptions({scaleMargins:{top:0.8,bottom:0}});}
+  if (selectedIndicators.has('Stochastic')){const st=STOCH(bars,14);const k=chart.addSeries(LineSeries,{color:'#00bcd4',lineWidth:1,title:'%K(14)',priceScaleId:'stoch',priceFormat:pf(2)});k.setData(map(st.k));const d=chart.addSeries(LineSeries,{color:'#ff5722',lineWidth:1,title:'%D(3)',priceScaleId:'stoch',priceFormat:pf(2)});d.setData(map(st.d));indicatorSeries.set('Stochastic',[k,d]);chart.priceScale('stoch').applyOptions({scaleMargins:{top:0.8,bottom:0}});}
+}
+
+// ── Toolbar wiring ──────────────────────────────────────────────────────────
+const btnCandle=document.getElementById('btn-candle'), btnLine=document.getElementById('btn-line');
+function setChartType(t){ chartType=t; candleSeries.applyOptions({visible:t==='candle'});
+  if(t==='line') lineSeries.setData(bars.map(c=>({time:c.time,value:c.close})));
+  lineSeries.applyOptions({visible:t==='line'});
+  btnCandle.className='tool'+(t==='candle'?' active-green':''); btnLine.className='tool'+(t==='line'?' active-cyan':''); }
+btnCandle.onclick=()=>setChartType('candle'); btnLine.onclick=()=>setChartType('line');
+
+const tfGroup=document.getElementById('tf-group');
+TIMEFRAME_OPTIONS.forEach(o=>{ const b=document.createElement('button');
+  b.className='tool tf'+(o.value===resolution?' active-green':''); b.textContent=o.label; b.dataset.res=o.value;
+  b.onclick=()=>{ resolution=o.value; [...tfGroup.children].forEach(c=>c.className='tool tf'+(c.dataset.res===resolution?' active-green':'')); render(); };
+  tfGroup.appendChild(b); });
+
+const btnInd=document.getElementById('btn-ind'), indMenu=document.getElementById('ind-menu'), indList=document.getElementById('ind-list');
+const indCount=document.getElementById('ind-count'), indClear=document.getElementById('ind-clear'), indChev=document.getElementById('ind-chev');
+AVAILABLE_INDICATORS.forEach(name=>{ const b=document.createElement('button'); b.className='ind-item'; b.dataset.name=name; b.innerHTML=`<span>${name}</span>`;
+  b.onclick=()=>{ selectedIndicators.has(name)?selectedIndicators.delete(name):selectedIndicators.add(name); syncIndicatorUI(); rebuildIndicators(); }; indList.appendChild(b); });
+function syncIndicatorUI(){ [...indList.children].forEach(c=>{ const on=selectedIndicators.has(c.dataset.name); c.className='ind-item'+(on?' on':''); c.innerHTML=`<span>${c.dataset.name}</span>`+(on?'<div class="dot"></div>':''); });
+  const n=selectedIndicators.size; indCount.style.display=n?'inline-flex':'none'; indCount.textContent=n; indClear.style.display=n?'inline':'none';
+  btnInd.className='tool tf'+((n>0||indMenu.classList.contains('open'))?' active-green':''); }
+btnInd.onclick=(e)=>{ e.stopPropagation(); indMenu.classList.toggle('open'); indChev.style.transform=indMenu.classList.contains('open')?'rotate(180deg)':''; syncIndicatorUI(); };
+indClear.onclick=(e)=>{ e.stopPropagation(); selectedIndicators.clear(); syncIndicatorUI(); rebuildIndicators(); };
+document.addEventListener('mousedown',(e)=>{ if(!indMenu.contains(e.target)&&e.target!==btnInd&&!btnInd.contains(e.target)){ indMenu.classList.remove('open'); indChev.style.transform=''; syncIndicatorUI(); } });
+
+const wrap=document.getElementById('wrap');
+document.getElementById('btn-fs').onclick=()=>{ wrap.classList.toggle('fullscreen'); requestAnimationFrame(resize); };
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ wrap.classList.remove('fullscreen'); requestAnimationFrame(resize); } });
+function resize(){ const r=chartEl.getBoundingClientRect(); if(r.width>0&&r.height>0) chart.applyOptions({width:r.width,height:r.height}); }
+new ResizeObserver(resize).observe(chartEl); window.addEventListener('resize',resize);
+
+const teamSelect=document.getElementById('team-select');
+teamSelect.onchange=()=>{ team=teamSelect.value; render(); };
+
+// ── Load data ────────────────────────────────────────────────────────────────
+fetch('mlb-prices.json').then(r=>r.json()).then(data=>{
+  PRICES = data;
+  document.getElementById('status').remove();
+  // sort teams by latest price desc (like a leaderboard)
+  const teams = Object.keys(PRICES).filter(t=>PRICES[t]?.length)
+    .sort((a,b)=>(PRICES[b].at(-1)?.[1]??0)-(PRICES[a].at(-1)?.[1]??0));
+  teams.forEach(t=>{ const o=document.createElement('option'); o.value=t; o.textContent=t; teamSelect.appendChild(o); });
+  team = teams.includes('New York Yankees') ? 'New York Yankees' : teams[0];
+  teamSelect.value = team;
+  resize();
+  render();
+}).catch(err=>{ document.getElementById('status').textContent = 'Failed to load mlb-prices.json — '+err; });
+</script>
+</body>
+</html>
