@@ -255,7 +255,7 @@ const vlines=makeVLines();candle.attachPrimitive(vlines);
 const targets=makeTargets();candle.attachPrimitive(targets);
 
 let PRICES={},GAMES={},NEXT={},ODDS={},TARGETS={};
-let team=null,resolution="60",chartType="candle",bars=[],seriesLogicalCount=0,curWin=null,curLoss=null,zoomedIn=false;
+let team=null,resolution="60",chartType="candle",bars=[],seriesLogicalCount=0,curWin=null,curLoss=null,zoomedIn=false,nextActive=false;
 let showGames=true,showDetails=false,showLines=true,showSetup=true;
 let periods=[]; // in-range games with bucket time + period bounds
 let periodByBt=new Map();
@@ -306,7 +306,7 @@ function buildMarkers(){
 function buildStrip(){
   const strip=document.getElementById('strip');strip.innerHTML='';
   const all=document.createElement('div');all.className='chip chip-all'+(selIdx<0?' sel':'');
-  all.innerHTML='<span>⤢ All</span>';all.onclick=()=>{selIdx=-1;zoomDefault();syncStripSel();updateReadout();};strip.appendChild(all);
+  all.innerHTML='<span>⤢ All</span>';all.onclick=()=>{setNextActive(false);selIdx=-1;zoomDefault();syncStripSel();updateReadout();};strip.appendChild(all);
   periods.forEach((pr,i)=>{const g=pr.game;const c=document.createElement('div');
     c.className='chip '+(g.won?'w':'l')+(i===selIdx?' sel':'');c.dataset.i=i;
     c.innerHTML=`<span class="cdot"></span><span>${g.home?'v':'@'}${ab(g.opp)}</span>`;
@@ -319,7 +319,7 @@ function syncStripSel(){[...document.querySelectorAll('.chip')].forEach(c=>{
   const sc=document.querySelector('.chip.sel');if(sc&&selIdx>=0)sc.scrollIntoView({block:'nearest',inline:'center'});
 }
 function selectGame(i,zoom){selIdx=i;syncStripSel();updateReadout();
-  if(zoom){hideTip(true);const pr=periods[i];const pad=6*3600;chart.timeScale().setVisibleRange({from:pr.start-pad,to:pr.end+pad});}}
+  if(zoom){setNextActive(false);hideTip(true);const pr=periods[i];const pad=6*3600;chart.timeScale().setVisibleRange({from:pr.start-pad,to:pr.end+pad});}}
 
 function zoomDefault(){const sec=resSec();const defBars=Math.min(bars.length,Math.round(14*86400/sec));
   const right=Math.max(bars.length-1,seriesLogicalCount-1); // include future whitespace (next-game band)
@@ -330,6 +330,7 @@ function zoomDefault(){const sec=resSec();const defBars=Math.min(bars.length,Mat
 function updateReadout(){document.getElementById('readout').innerHTML='';} // selected-game info lives on the chart, not the toolbar
 
 function render(){
+  setNextActive(false);
   const tk=PRICES[team]||[];
   bars=bucketTicks(tk,resSec());
   // extend the axis with whitespace into the future so the next-game band is visible
@@ -461,7 +462,12 @@ function focusNextGame(){
   chart.timeScale().setVisibleRange({from:ps-12*3600,to:ns+3*3600});
   updateZoomOutVis();
 }
-document.getElementById('btn-next').onclick=focusNextGame;
+const bNext=document.getElementById('btn-next');
+function setNextActive(v){nextActive=v;bNext.className='tool tf'+(v?' active-cyan':'');}
+bNext.onclick=()=>{
+  if(nextActive){setNextActive(false);selIdx=-1;hideTip(true);syncStripSel();zoomDefault();updateZoomOutVis();}
+  else{setNextActive(true);focusNextGame();}
+};
 
 // contextual zoom-out: visible only when zoomed in tighter than the default overview
 const zoomOutBtn=document.getElementById('zoomout');
@@ -474,7 +480,7 @@ function updateZoomOutVis(){
   if(zoomedIn)hideTip(true);   // while zoomed in: no game popups, just the zoom-out button
 }
 chart.timeScale().subscribeVisibleLogicalRangeChange(updateZoomOutVis);
-zoomOutBtn.onclick=()=>{selIdx=-1;hideTip(true);syncStripSel();updateReadout();zoomDefault();updateZoomOutVis();};
+zoomOutBtn.onclick=()=>{setNextActive(false);selIdx=-1;hideTip(true);syncStripSel();updateReadout();zoomDefault();updateZoomOutVis();};
 
 function resize(){const r=chartEl.getBoundingClientRect();if(r.width>0&&r.height>0)chart.applyOptions({width:r.width,height:r.height});}
 new ResizeObserver(resize).observe(chartEl);window.addEventListener('resize',resize);
