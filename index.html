@@ -13,27 +13,39 @@
   body{display:flex;align-items:center;justify-content:center;padding:16px;}
   #wrap{display:flex;flex-direction:column;overflow:hidden;width:min(1380px,100%);height:min(760px,95vh);border:1px solid var(--border);border-radius:8px;background:var(--bg-primary);}
 
-  #mkt{display:flex;align-items:center;gap:20px;padding:9px 14px;border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap;}
-  #team-select{background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:6px;padding:7px 10px;font:inherit;font-size:14px;font-weight:600;min-width:200px;cursor:pointer;}
-  .stat{display:flex;flex-direction:column;gap:2px;}
-  .stat .lbl{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;}
-  .stat .val{font-size:14px;font-variant-numeric:tabular-nums;}
+  #mkt{display:flex;align-items:center;gap:18px;padding:11px 16px;border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap;}
+  #team-select{background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:7px;padding:8px 11px;font:inherit;font-size:14px;font-weight:600;min-width:188px;cursor:pointer;}
+  .mkt-price{display:flex;flex-direction:column;line-height:1.05;}
+  .mkt-price .px{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--text-primary);letter-spacing:-.01em;}
+  .mkt-price .px-lbl{font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.09em;margin-top:4px;}
+  .mkt-sep{width:1px;height:30px;background:var(--border);}
+  .mkt-perf{display:flex;align-items:center;gap:16px;}
+  .mkt-stat{display:flex;flex-direction:column;gap:4px;}
+  .mkt-stat .l{font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;}
+  .mkt-stat .v{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--text-primary);}
   .up{color:var(--green);}.down{color:var(--red-light);}
   #form{display:flex;align-items:center;gap:3px;}
-  .pill{width:17px;height:17px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#0C0E12;}
+  .pill{width:15px;height:15px;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#0C0E12;}
   .pill.w{background:var(--green);}.pill.l{background:var(--red-light);}
-  #next{margin-left:auto;display:flex;align-items:stretch;border:1px solid var(--border);border-radius:8px;overflow:hidden;}
-  #next .blk{padding:5px 12px;display:flex;flex-direction:column;gap:2px;}
-  #next .blk + .blk{border-left:1px solid var(--border);}
-  #next .lbl{font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;}
-  #next .big{font-size:13px;font-weight:600;}
-  .tgt-win{color:var(--green);}.tgt-loss{color:var(--red-light);}
+  #next{margin-left:auto;display:flex;flex-direction:column;gap:7px;padding:8px 12px;border:1px solid var(--border);border-radius:10px;background:rgba(0,217,245,.045);}
+  #next:empty{display:none;}
+  .ng-top{display:flex;align-items:center;gap:8px;}
+  .ng-tag{font-size:9px;font-weight:700;letter-spacing:.07em;color:var(--cyan);}
+  .ng-opp{font-size:14px;font-weight:600;color:var(--text-primary);white-space:nowrap;}
+  .ng-time{margin-left:auto;font-size:10px;color:var(--text-muted);padding-left:12px;}
+  .ng-tgts{display:flex;gap:6px;}
+  .ng-chip{font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;font-variant-numeric:tabular-nums;}
+  .ng-chip.win{color:var(--green);background:rgba(178,237,104,.13);}
+  .ng-chip.loss{color:var(--red-light);background:rgba(212,19,90,.15);}
 
   /* game strip */
   #strip-row{display:flex;align-items:center;gap:8px;padding:6px 14px;border-bottom:1px solid var(--border);flex-shrink:0;}
   #strip-row .hdr{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;}
-  #strip{display:flex;align-items:center;gap:4px;overflow-x:auto;padding-bottom:2px;}
-  #strip::-webkit-scrollbar{height:5px;}#strip::-webkit-scrollbar-thumb{background:var(--text-muted);border-radius:3px;}
+  #strip{display:flex;align-items:center;gap:4px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;}
+  #strip::-webkit-scrollbar{height:5px;}
+  #strip::-webkit-scrollbar-thumb{background:transparent;border-radius:3px;}
+  #strip:hover{scrollbar-width:thin;}
+  #strip:hover::-webkit-scrollbar-thumb{background:var(--text-muted);}
   .chip{display:flex;align-items:center;gap:5px;padding:3px 8px;border:1px solid var(--border);border-radius:14px;background:var(--bg-tertiary);
     cursor:pointer;font-size:11px;color:var(--text-secondary);white-space:nowrap;transition:all .1s;}
   .chip:hover{color:var(--text-primary);border-color:var(--text-muted);}
@@ -53,24 +65,23 @@
   .mv-up{color:var(--green);}.mv-down{color:var(--red-light);}
   #chart{flex:1;min-height:0;width:100%;position:relative;}
   /* hover card anchored to a game circle */
-  #tip{position:absolute;display:none;z-index:20;min-width:196px;overflow:hidden;pointer-events:auto;
+  #tip{position:absolute;display:none;z-index:20;width:182px;overflow:hidden;pointer-events:auto;
     background:linear-gradient(180deg,rgba(22,28,35,.98),rgba(13,17,22,.98));border:1px solid var(--border);
-    border-radius:11px;box-shadow:0 14px 36px rgba(0,0,0,.62);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);}
+    border-radius:12px;box-shadow:0 14px 36px rgba(0,0,0,.62);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);}
   .tip-accent{position:absolute;left:0;top:0;bottom:0;width:3px;}
   #tip.w .tip-accent{background:var(--green);box-shadow:0 0 14px rgba(178,237,104,.5);}
   #tip.l .tip-accent{background:var(--red-light);box-shadow:0 0 14px rgba(212,19,90,.5);}
-  .tip-body{padding:10px 12px 10px 15px;}
-  .tip-top{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+  .tip-body{padding:11px 13px 11px 15px;}
+  .tip-top{display:flex;align-items:center;margin-bottom:7px;}
   .tip-badge{font-size:9px;font-weight:700;letter-spacing:.07em;padding:3px 6px;border-radius:5px;line-height:1;}
   #tip.w .tip-badge{color:var(--green);background:rgba(178,237,104,.14);}
   #tip.l .tip-badge{color:var(--red-light);background:rgba(212,19,90,.16);}
-  .tip-match{font-size:13px;font-weight:600;color:var(--text-primary);white-space:nowrap;}
-  .tip-date{margin-left:auto;font-size:10px;color:var(--text-muted);padding-left:8px;}
-  .tip-px{display:flex;align-items:center;gap:6px;font-size:12px;font-variant-numeric:tabular-nums;color:var(--text-secondary);margin-bottom:10px;white-space:nowrap;}
-  .tip-px .arrow{color:var(--text-muted);}
-  .tip-delta{margin-left:3px;font-size:11px;font-weight:600;padding:2px 6px;border-radius:5px;font-variant-numeric:tabular-nums;}
-  .tip-delta.up{color:var(--green);background:rgba(178,237,104,.13);}
-  .tip-delta.down{color:var(--red-light);background:rgba(212,19,90,.15);}
+  .tip-date{margin-left:auto;font-size:10px;color:var(--text-muted);}
+  .tip-match{font-size:15px;font-weight:600;color:var(--text-primary);white-space:nowrap;margin-bottom:9px;}
+  .tip-px{font-size:12px;color:var(--text-secondary);font-variant-numeric:tabular-nums;white-space:nowrap;margin-bottom:2px;}
+  .tip-px .arrow{color:var(--text-muted);margin:0 3px;}
+  .tip-pct{font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;margin-bottom:11px;letter-spacing:-.01em;}
+  .tip-pct.up{color:var(--green);}.tip-pct.down{color:var(--red-light);}
   .tip-btns{display:flex;gap:5px;}
   .tip-btns button{height:29px;background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-secondary);border-radius:7px;font:inherit;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;transition:all .12s;}
   .tip-btns button.nav{width:31px;flex:0 0 auto;}
@@ -89,10 +100,13 @@
 <div id="wrap">
   <div id="mkt">
     <select id="team-select" title="MLB team market"></select>
-    <div class="stat"><span class="lbl">Price</span><span class="val" id="st-price">—</span></div>
-    <div class="stat"><span class="lbl">Record</span><span class="val" id="st-rec">—</span></div>
-    <div class="stat"><span class="lbl">Streak</span><span class="val" id="st-streak">—</span></div>
-    <div class="stat"><span class="lbl">Last 10</span><span class="val" id="form"></span></div>
+    <div class="mkt-price"><span class="px" id="st-price">—</span><span class="px-lbl">Index price</span></div>
+    <div class="mkt-sep"></div>
+    <div class="mkt-perf">
+      <div class="mkt-stat"><span class="l">Record</span><span class="v" id="st-rec">—</span></div>
+      <div class="mkt-stat"><span class="l">Streak</span><span class="v" id="st-streak">—</span></div>
+      <div class="mkt-stat"><span class="l">Last 10</span><span id="form"></span></div>
+    </div>
     <div id="next"></div>
   </div>
 
@@ -316,9 +330,9 @@ function updateReadout(){
   const r=document.getElementById('readout');
   if(selIdx>=0){const pr=periods[selIdx],g=pr.game;const tk=PRICES[team];
     const jp=jumpAt(tk,g.t),ps=jp?jp.before:null,pe=jp?jp.after:null;const mv=(ps!=null&&pe!=null)?pe-ps:null;
-    const pct=(mv!=null&&ps)?(mv/ps*100):null;
+    const pct=(mv!=null&&ps)?(mv/ps*100):null;const showMv=pct!=null&&Math.abs(pct)<=12;
     r.innerHTML=`<span style="color:var(--text-primary)">${dayfmt(g.gt||g.t)} · ${g.won?'W':'L'} ${g.ts}-${g.os} ${g.home?'vs':'@'} ${ab(g.opp)}</span>`+
-      (mv!=null?` <span class="${mv>=0?'mv-up':'mv-down'}">${fmtP(ps)}→${fmtP(pe)} (${mv>=0?'+':''}${mv.toFixed(2)}${pct!=null?' / '+(pct>=0?'+':'')+pct.toFixed(1)+'%':''})</span>`:'');
+      (showMv?` <span class="${mv>=0?'mv-up':'mv-down'}">${fmtP(ps)}→${fmtP(pe)} (${pct>=0?'+':''}${pct.toFixed(1)}%)</span>`:'');
   } else r.innerHTML='';
 }
 
@@ -358,15 +372,13 @@ function render(){
   // header
   document.getElementById('st-price').textContent='$'+fmtP(s.last);
   document.getElementById('st-rec').textContent=`${s.w}–${s.l}`;
-  const stE=document.getElementById('st-streak');stE.textContent=(s.sign?'W':'L')+s.streak;stE.className='val '+(s.sign?'up':'down');
+  const stE=document.getElementById('st-streak');stE.textContent=(s.sign?'W':'L')+s.streak;stE.className='v '+(s.sign?'up':'down');
   const form=document.getElementById('form');form.innerHTML='';
   s.games.slice(-10).forEach(g=>{const d=document.createElement('span');d.className='pill '+(g.won?'w':'l');d.textContent=g.won?'W':'L';d.title=`${g.home?'vs':'@'} ${g.opp} ${g.ts}-${g.os}`;form.appendChild(d);});
   const n=NEXT[team],nx=document.getElementById('next');
   if(n){const winT=s.last+s.medWin,lossT=s.last+s.medLoss;
-    nx.innerHTML=`<div class="blk"><span class="lbl">Next game</span><span class="big">${n.home?'vs':'@'} ${ab(n.opp)}</span></div>`+
-      `<div class="blk"><span class="lbl">First pitch</span><span class="big">${fmtT(n.t)}</span></div>`+
-      `<div class="blk"><span class="lbl">If win</span><span class="big tgt-win">${(s.medWin>=0?'+':'')+fmtP(s.medWin)} → ${fmtP(winT)}</span></div>`+
-      `<div class="blk"><span class="lbl">If loss</span><span class="big tgt-loss">${fmtP(s.medLoss)} → ${fmtP(lossT)}</span></div>`;}
+    nx.innerHTML=`<div class="ng-top"><span class="ng-tag">NEXT</span><span class="ng-opp">${n.home?'vs':'@'} ${ab(n.opp)}</span><span class="ng-time">${fmtT(n.t)}</span></div>`+
+      `<div class="ng-tgts"><span class="ng-chip win">▲ ${fmtP(winT)}</span><span class="ng-chip loss">▼ ${fmtP(lossT)}</span></div>`;}
   else nx.innerHTML='';
 
   applyFmt();zoomDefault();
@@ -381,14 +393,16 @@ function hideTip(now){cancelHide();const go=()=>{tip.style.display='none';tipIdx
 function tipHTML(idx){const pr=periods[idx],g=pr.game,tk=PRICES[team];
   const jp=jumpAt(tk,g.t),ps=jp?jp.before:null,pe=jp?jp.after:null;
   const mv=(ps!=null&&pe!=null)?pe-ps:null,pct=(mv!=null&&ps)?mv/ps*100:null,up=mv!=null&&mv>=0;
-  const px=(ps!=null&&pe!=null)
-    ? `<div class="tip-px">$${fmtP(ps)} <span class="arrow">→</span> $${fmtP(pe)}<span class="tip-delta ${up?'up':'down'}">${up?'+':''}${mv.toFixed(2)}${pct!=null?' · '+(up?'+':'')+pct.toFixed(1)+'%':''}</span></div>`
+  // suppress implausible moves (early-season oracle-calibration prices/reseeds — not a real game settlement)
+  const moveBlock=(ps!=null&&pe!=null&&pct!=null&&Math.abs(pct)<=12)
+    ? `<div class="tip-px">$${fmtP(ps)} <span class="arrow">→</span> $${fmtP(pe)}</div>`+
+      `<div class="tip-pct ${up?'up':'down'}">${up?'+':''}${pct.toFixed(1)}%</div>`
     : '';
   return `<div class="tip-accent"></div><div class="tip-body">`+
     `<div class="tip-top"><span class="tip-badge">${g.won?'WIN':'LOSS'}</span>`+
-      `<span class="tip-match">${g.ts}–${g.os} ${g.home?'vs':'@'} ${ab(g.opp)}</span>`+
       `<span class="tip-date">${dayfmt(g.gt||g.t)}</span></div>`+
-    px+
+    `<div class="tip-match">${g.ts}–${g.os} ${g.home?'vs':'@'} ${ab(g.opp)}</div>`+
+    moveBlock+
     `<div class="tip-btns"><button class="nav" data-a="prev" ${idx<=0?'disabled':''}>◀</button>`+
       `<button class="zoom" data-a="zoom">⤢ Zoom in</button>`+
       `<button class="nav" data-a="next" ${idx>=periods.length-1?'disabled':''}>▶</button></div>`+
