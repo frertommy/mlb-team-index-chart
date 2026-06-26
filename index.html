@@ -183,17 +183,21 @@ function makeTargets(){
       const tw=ctx.measureText(label).width,padX=5*hpr,h=15*hpr,bw=tw+padX*2;let bx=railEnd+3*hpr;if(bx+bw>W)bx=railEnd-bw-3*hpr;
       ctx.fillStyle=color;ctx.fillRect(Math.round(bx),y-h/2,Math.round(bw),h);ctx.fillStyle='#0C0E12';ctx.fillText(label,Math.round(bx)+padX,y);};
     if(railEnd>railStart){seg(d.win,'#B2ED68',`WIN ${d.win.toFixed(2)}`);seg(d.loss,'#D4135A',`LOSS ${d.loss.toFixed(2)}`);}
-    // odds line: market win-prob → implied settle price between the rails, compressed across the corridor
-    if(d.odds&&d.odds.length>1&&xs!=null&&xe!=null&&d.win!=null&&d.loss!=null){
-      const a=d.odds,t0=a[0][0],tN=a[a.length-1][0],span=(tN-t0)||1;
+    // odds line: market win-prob → implied settle price, plotted at REAL time (ends at last observation).
+    // Solid = observed; dashed = current read carried flat to the settle divider (a projection, not data).
+    if(d.odds&&d.odds.length>1&&d.win!=null&&d.loss!=null){
+      const yFor=(p)=>{const yc=series.priceToCoordinate(d.loss+p*(d.win-d.loss));return yc===null?null:yc*vpr;};
       ctx.setLineDash([]);ctx.lineWidth=Math.max(1,Math.round(1.5*hpr));ctx.strokeStyle='#00d9f5';ctx.globalAlpha=0.95;
       ctx.beginPath();let started=false,lx=0,ly=0,lp=null;
-      for(const [t,p] of a){const price=d.loss+p*(d.win-d.loss);const yc=series.priceToCoordinate(price);if(yc===null)continue;
-        const x=xs+(xe-xs)*((t-t0)/span),y=yc*vpr;if(!started){ctx.moveTo(x,y);started=true;}else ctx.lineTo(x,y);lx=x;ly=y;lp=p;}
-      ctx.stroke();ctx.globalAlpha=1;
-      if(started){ctx.fillStyle='#00d9f5';ctx.beginPath();ctx.arc(lx,ly,3*hpr,0,6.3);ctx.fill();
+      for(const [t,p] of d.odds){const xco=ts.timeToCoordinate(t);if(xco===null)continue;const y=yFor(p);if(y===null)continue;const x=xco*hpr;
+        if(!started){ctx.moveTo(x,y);started=true;}else ctx.lineTo(x,y);lx=x;ly=y;lp=p;}
+      ctx.stroke();
+      if(started){
+        if(xe!=null&&xe>lx){ctx.setLineDash([4*hpr,4*hpr]);ctx.globalAlpha=0.6;ctx.lineWidth=Math.max(1,Math.round(hpr));
+          ctx.beginPath();ctx.moveTo(lx,ly);ctx.lineTo(xe,ly);ctx.stroke();ctx.setLineDash([]);}
+        ctx.globalAlpha=1;ctx.fillStyle='#00d9f5';ctx.beginPath();ctx.arc(lx,ly,3*hpr,0,6.3);ctx.fill();
         const lbl='MKT '+Math.round(lp*100)+'%';ctx.font=`${10*hpr}px ui-monospace, Menlo, monospace`;ctx.textBaseline='middle';ctx.textAlign='left';
-        const tw=ctx.measureText(lbl).width,padX=5*hpr,h=15*hpr,bw=tw+padX*2;let bx=lx+7*hpr;if(bx+bw>W)bx=lx-bw-7*hpr;
+        const tw=ctx.measureText(lbl).width,padX=5*hpr,h=15*hpr,bw=tw+padX*2;const ax=(xe!=null&&xe>lx)?xe:lx;let bx=ax+6*hpr;if(bx+bw>W)bx=ax-bw-6*hpr;
         ctx.fillStyle='#00d9f5';ctx.fillRect(Math.round(bx),ly-h/2,Math.round(bw),h);ctx.fillStyle='#0C0E12';ctx.fillText(lbl,Math.round(bx)+padX,ly);}
     }
     // the 2 dividers (dashed cyan): left = prev game settled, right = next game settles
@@ -229,7 +233,11 @@ function applyTargets(){
   if(prevSettle==null){targets.setData(null);return;}
   const nx=NEXT[team];let endT=null,opp=null;
   if(nx){const sec=resSec();endT=Math.floor((nx.t+NEXT_SETTLE_OFFSET)/sec)*sec;opp=(nx.home?'vs ':'@ ')+ab(nx.opp);}
-  targets.setData({startT:prevSettle,endT,win:s.last+s.medWin,loss:s.last+s.medLoss,opp,odds:ODDS[team]?.series});
+  // odds: snap to the bar grid (so timeToCoordinate resolves) + keep the recent window; plotted at real time
+  let odds=null;const os=ODDS[team]?.series;
+  if(os&&os.length){const sec=resSec();const cutoff=(bars.length?bars[bars.length-1].time:0)-48*3600;const m=new Map();
+    for(const [t,p] of os){if(t<cutoff)continue;m.set(Math.floor(t/sec)*sec,p);} odds=[...m.entries()].sort((a,b)=>a[0]-b[0]);}
+  targets.setData({startT:prevSettle,endT,win:s.last+s.medWin,loss:s.last+s.medLoss,opp,odds});
 }
 
 function stats(t){
