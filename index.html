@@ -216,7 +216,7 @@ const markersPrimitive=createSeriesMarkers(candle,[]);
 const vlines=makeVLines();candle.attachPrimitive(vlines);
 const targets=makeTargets();candle.attachPrimitive(targets);
 
-let PRICES={},GAMES={},NEXT={},ODDS={};
+let PRICES={},GAMES={},NEXT={},ODDS={},TARGETS={};
 let team=null,resolution="60",chartType="candle",bars=[],seriesLogicalCount=0;
 let showGames=true,showDetails=false,showLines=true,showSetup=true;
 let periods=[]; // in-range games with bucket time + period bounds
@@ -246,12 +246,9 @@ function stats(t){
   let w=0,l=0;g.forEach(x=>x.won?w++:l++);
   let streak=0,sign=null;
   for(let i=g.length-1;i>=0;i--){const win=g[i].won;if(sign===null){sign=win;streak=1;}else if(win===sign)streak++;else break;}
-  // typical settle move from RECENT games only (early-season had a huge structural decline + engine reseeds → not representative)
-  const wm=[],lm=[];
-  for(const x of g.slice(-20)){const b=priceAt(tk,x.t-1800),a=priceAt(tk,x.t+2*3600);
-    if(b==null||a==null)continue;const d=a-b;if(Math.abs(d)>20)continue;(x.won?wm:lm).push(d);}
-  const med=(a)=>{if(!a.length)return 0;const s=[...a].sort((p,q)=>p-q);return s[Math.floor(s.length/2)];};
-  return {last,w,l,streak,sign,medWin:med(wm),medLoss:med(lm),games:g};
+  // typical settle move: median win/loss settlement jump, computed server-side (mlb-targets.json)
+  const tj=TARGETS[t]||[0,0];
+  return {last,w,l,streak,sign,medWin:tj[0],medLoss:tj[1],games:g};
 }
 
 function buildMarkers(){
@@ -430,8 +427,8 @@ function resize(){const r=chartEl.getBoundingClientRect();if(r.width>0&&r.height
 new ResizeObserver(resize).observe(chartEl);window.addEventListener('resize',resize);
 const sel=document.getElementById('team-select');sel.onchange=()=>{team=sel.value;render();};
 
-Promise.all([fetch('mlb-prices.json').then(r=>r.json()),fetch('mlb-games.json').then(r=>r.json()),fetch('mlb-next.json').then(r=>r.json()),fetch('mlb-odds.json').then(r=>r.json()).catch(()=>({}))])
-.then(([p,g,n,o])=>{PRICES=p;GAMES=g;NEXT=n;ODDS=o||{};document.getElementById('status').remove();
+Promise.all([fetch('mlb-prices.json').then(r=>r.json()),fetch('mlb-games.json').then(r=>r.json()),fetch('mlb-next.json').then(r=>r.json()),fetch('mlb-odds.json').then(r=>r.json()).catch(()=>({})),fetch('mlb-targets.json').then(r=>r.json()).catch(()=>({}))])
+.then(([p,g,n,o,tj])=>{PRICES=p;GAMES=g;NEXT=n;ODDS=o||{};TARGETS=tj||{};document.getElementById('status').remove();
   const teams=Object.keys(PRICES).filter(t=>PRICES[t]?.length).sort((a,b)=>(PRICES[b].at(-1)?.[1]??0)-(PRICES[a].at(-1)?.[1]??0));
   teams.forEach(t=>{const o=document.createElement('option');o.value=t;o.textContent=t;sel.appendChild(o);});
   team=teams.includes('New York Yankees')?'New York Yankees':teams[0];sel.value=team;resize();render();})
