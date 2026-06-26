@@ -172,19 +172,19 @@ const chart=createChart(chartEl,{
 });
 const candle=chart.addSeries(CandlestickSeries,{upColor:"#B2ED68",downColor:"#B30F43",borderVisible:false,wickUpColor:"#B2ED68",wickDownColor:"#B30F43"});
 const line=chart.addSeries(LineSeries,{color:"#B2ED68",lineWidth:2});line.applyOptions({visible:false});
-// Next-game projection: 2 dividers (first pitch + projected settle) framing a cyan band,
-// with win/loss target rails running from the last settlement to the projected-settle divider.
+// Inter-game window: 2 dividers from the PREVIOUS game's settlement to the NEXT game's
+// projected settlement, framing a cyan band, with win/loss target rails across it.
 function makeTargets(){
-  let api=null,d=null; // {x0Time, startT, endT, win, loss, opp}
+  let api=null,d=null; // {startT (prev settle), endT (next proj settle), win, loss, opp}
   const draw=(target)=>{ if(!api||!d)return; target.useBitmapCoordinateSpace(scope=>{
     const ctx=scope.context,hpr=scope.horizontalPixelRatio,vpr=scope.verticalPixelRatio,W=scope.bitmapSize.width,H=scope.bitmapSize.height,ts=api.chart.timeScale(),series=api.series;
     const xc=(t)=>{if(t==null)return null;const c=ts.timeToCoordinate(t);return c===null?null:c*hpr;};
-    const x0=xc(d.x0Time),xs=xc(d.startT),xe=xc(d.endT);
+    const xs=xc(d.startT),xe=xc(d.endT);
     ctx.save();
-    // upcoming-game band (outcome unknown → neutral cyan)
-    if(xs!=null&&xe!=null&&xe>xs){ctx.fillStyle='rgba(0,217,245,0.07)';ctx.fillRect(Math.round(xs),0,Math.round(xe-xs),H);}
-    // win/loss rails: last settlement → projected-settle divider (fallback: right edge)
-    const railEnd=(xe!=null?xe:W),railStart=(x0!=null?Math.max(0,x0):0);
+    // band spanning prev-settle → next-settle (outcome of next game unknown → neutral cyan)
+    if(xs!=null&&xe!=null&&xe>xs){ctx.fillStyle='rgba(0,217,245,0.06)';ctx.fillRect(Math.round(xs),0,Math.round(xe-xs),H);}
+    // win/loss rails across the band (fallback end: right edge)
+    const railEnd=(xe!=null?xe:W),railStart=(xs!=null?Math.max(0,xs):0);
     const seg=(price,color,label)=>{const yc=series.priceToCoordinate(price);if(yc===null)return;const y=Math.round(yc*vpr)+0.5;
       ctx.setLineDash([4*hpr,4*hpr]);ctx.lineWidth=Math.max(1,Math.round(hpr));ctx.strokeStyle=color;
       ctx.beginPath();ctx.moveTo(railStart,y);ctx.lineTo(railEnd,y);ctx.stroke();
@@ -192,12 +192,12 @@ function makeTargets(){
       const tw=ctx.measureText(label).width,padX=5*hpr,h=15*hpr,bw=tw+padX*2;let bx=railEnd+3*hpr;if(bx+bw>W)bx=railEnd-bw-3*hpr;
       ctx.fillStyle=color;ctx.fillRect(Math.round(bx),y-h/2,Math.round(bw),h);ctx.fillStyle='#0C0E12';ctx.fillText(label,Math.round(bx)+padX,y);};
     if(railEnd>railStart){seg(d.win,'#B2ED68',`WIN ${d.win.toFixed(2)}`);seg(d.loss,'#D4135A',`LOSS ${d.loss.toFixed(2)}`);}
-    // the 2 dividers (dashed cyan)
+    // the 2 dividers (dashed cyan): left = prev game settled, right = next game settles
     const vline=(x)=>{if(x==null)return;ctx.setLineDash([5*hpr,4*hpr]);ctx.lineWidth=Math.max(1,Math.round(hpr));ctx.strokeStyle='rgba(0,217,245,0.6)';const xb=Math.round(x)+0.5;ctx.beginPath();ctx.moveTo(xb,0);ctx.lineTo(xb,H);ctx.stroke();};
     vline(xs);vline(xe);
-    // label: "NEXT @ OPP" sitting just left of the band's first-pitch divider
-    if(xs!=null&&d.opp){ctx.setLineDash([]);ctx.textBaseline='top';ctx.textAlign='right';ctx.fillStyle='#00d9f5';
-      ctx.font=`${10*hpr}px ui-monospace, Menlo, monospace`;ctx.fillText('NEXT '+d.opp+' ›',Math.round(xs)-4*hpr,4*hpr);}
+    // label "NEXT @ OPP ›" at the start of the band
+    if(xs!=null&&d.opp){ctx.setLineDash([]);ctx.textBaseline='top';ctx.textAlign='left';ctx.fillStyle='#00d9f5';
+      ctx.font=`${10*hpr}px ui-monospace, Menlo, monospace`;ctx.fillText('NEXT '+d.opp+' ›',Math.round(xs)+5*hpr,4*hpr);}
     ctx.restore();});};
   const view={renderer(){return {draw};},zOrder(){return 'top';}};
   return {attached(p){api=p;},detached(){api=null;},updateAllViews(){},paneViews(){return [view];},
@@ -221,11 +221,11 @@ const fmtT=(t)=>new Date(t*1000).toLocaleString(undefined,{month:'2-digit',day:'
 function applyTargets(){
   if(!showSetup){targets.setData(null);return;}
   const s=stats(team); if(s.last==null){targets.setData(null);return;}
-  const x0=periods.length?periods[periods.length-1].bt:(bars.length?bars[bars.length-1].time:null);
-  if(x0==null){targets.setData(null);return;}
-  const nx=NEXT[team];let startT=null,endT=null,opp=null;
-  if(nx){const sec=resSec();startT=Math.floor(nx.t/sec)*sec;endT=Math.floor((nx.t+NEXT_SETTLE_OFFSET)/sec)*sec;opp=(nx.home?'vs ':'@ ')+ab(nx.opp);}
-  targets.setData({x0Time:x0,startT,endT,win:s.last+s.medWin,loss:s.last+s.medLoss,opp});
+  const prevSettle=periods.length?periods[periods.length-1].bt:(bars.length?bars[bars.length-1].time:null);
+  if(prevSettle==null){targets.setData(null);return;}
+  const nx=NEXT[team];let endT=null,opp=null;
+  if(nx){const sec=resSec();endT=Math.floor((nx.t+NEXT_SETTLE_OFFSET)/sec)*sec;opp=(nx.home?'vs ':'@ ')+ab(nx.opp);}
+  targets.setData({startT:prevSettle,endT,win:s.last+s.medWin,loss:s.last+s.medLoss,opp});
 }
 
 function stats(t){
