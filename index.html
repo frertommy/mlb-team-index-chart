@@ -55,13 +55,14 @@
   .chip-all{border-style:dashed;}
 
   #toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 12px;border-bottom:1px solid var(--border);flex-shrink:0;}
-  .group{display:flex;align-items:center;gap:2px;}.left{gap:8px;}
-  button.tool{background:transparent;border:none;cursor:pointer;color:var(--text-muted);padding:5px 9px;border-radius:4px;font:inherit;font-size:12px;line-height:1;display:inline-flex;align-items:center;gap:4px;transition:all .12s;}
+  .group{display:flex;align-items:center;gap:2px;}.left{gap:8px;flex-shrink:0;flex-wrap:nowrap;}
+  #toolbar > .group:last-child{min-width:0;}
+  button.tool{background:transparent;border:none;cursor:pointer;color:var(--text-muted);padding:5px 9px;border-radius:4px;font:inherit;font-size:12px;line-height:1;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;transition:all .12s;}
   button.tool:hover{color:var(--text-primary);background:var(--bg-hover);}
   button.tool.active-green{background:rgba(178,237,104,.2);color:var(--green);}
   button.tool.active-cyan{background:rgba(0,217,245,.2);color:var(--cyan);}
   .tf{padding:4px 10px;font-weight:500;}
-  #readout{font-size:11px;color:var(--text-secondary);font-variant-numeric:tabular-nums;display:flex;gap:10px;align-items:center;}
+  #readout{font-size:11px;color:var(--text-secondary);font-variant-numeric:tabular-nums;display:flex;gap:10px;align-items:center;min-width:0;overflow:hidden;white-space:nowrap;}
   .mv-up{color:var(--green);}.mv-down{color:var(--red-light);}
   #chart{flex:1;min-height:0;width:100%;position:relative;}
   /* hover card anchored to a game circle */
@@ -90,7 +91,7 @@
   .tip-btns button.zoom:hover{border-color:var(--cyan);background:rgba(0,217,245,.1);}
   .tip-btns button:disabled{opacity:.28;cursor:default;}
   /* contextual on-chart zoom-out (shows only when zoomed in) */
-  #zoomout{position:absolute;left:12px;bottom:34px;z-index:15;display:none;align-items:center;gap:5px;background:rgba(15,20,25,.92);border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;padding:5px 10px;font:inherit;font-size:11px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.45);}
+  #zoomout{position:absolute;left:12px;top:10px;z-index:15;display:none;align-items:center;gap:5px;background:rgba(15,20,25,.92);border:1px solid var(--border);color:var(--text-secondary);border-radius:6px;padding:5px 10px;font:inherit;font-size:11px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.45);}
   #zoomout:hover{color:var(--text-primary);border-color:var(--text-muted);background:var(--bg-hover);}
   #chart a#tv-attr-logo{display:none !important;}
   #status{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:13px;}
@@ -254,7 +255,7 @@ const vlines=makeVLines();candle.attachPrimitive(vlines);
 const targets=makeTargets();candle.attachPrimitive(targets);
 
 let PRICES={},GAMES={},NEXT={},ODDS={},TARGETS={};
-let team=null,resolution="60",chartType="candle",bars=[],seriesLogicalCount=0,curWin=null,curLoss=null;
+let team=null,resolution="60",chartType="candle",bars=[],seriesLogicalCount=0,curWin=null,curLoss=null,zoomedIn=false;
 let showGames=true,showDetails=false,showLines=true,showSetup=true;
 let periods=[]; // in-range games with bucket time + period bounds
 let periodByBt=new Map();
@@ -318,7 +319,7 @@ function syncStripSel(){[...document.querySelectorAll('.chip')].forEach(c=>{
   const sc=document.querySelector('.chip.sel');if(sc&&selIdx>=0)sc.scrollIntoView({block:'nearest',inline:'center'});
 }
 function selectGame(i,zoom){selIdx=i;syncStripSel();updateReadout();
-  if(zoom){const pr=periods[i];const pad=6*3600;chart.timeScale().setVisibleRange({from:pr.start-pad,to:pr.end+pad});}}
+  if(zoom){hideTip(true);const pr=periods[i];const pad=6*3600;chart.timeScale().setVisibleRange({from:pr.start-pad,to:pr.end+pad});}}
 
 function zoomDefault(){const sec=resSec();const defBars=Math.min(bars.length,Math.round(14*86400/sec));
   const right=Math.max(bars.length-1,seriesLogicalCount-1); // include future whitespace (next-game band)
@@ -326,15 +327,7 @@ function zoomDefault(){const sec=resSec();const defBars=Math.min(bars.length,Mat
   if(right>left)chart.timeScale().setVisibleLogicalRange({from:left,to:right});
   else chart.timeScale().fitContent();}
 
-function updateReadout(){
-  const r=document.getElementById('readout');
-  if(selIdx>=0){const pr=periods[selIdx],g=pr.game;const tk=PRICES[team];
-    const jp=jumpAt(tk,g.t),ps=jp?jp.before:null,pe=jp?jp.after:null;const mv=(ps!=null&&pe!=null)?pe-ps:null;
-    const pct=(mv!=null&&ps)?(mv/ps*100):null;const showMv=pct!=null&&Math.abs(pct)<=12;
-    r.innerHTML=`<span style="color:var(--text-primary)">${dayfmt(g.gt||g.t)} · ${g.won?'W':'L'} ${g.ts}-${g.os} ${g.home?'vs':'@'} ${ab(g.opp)}</span>`+
-      (showMv?` <span class="${mv>=0?'mv-up':'mv-down'}">${fmtP(ps)}→${fmtP(pe)} (${pct>=0?'+':''}${pct.toFixed(1)}%)</span>`:'');
-  } else r.innerHTML='';
-}
+function updateReadout(){document.getElementById('readout').innerHTML='';} // selected-game info lives on the chart, not the toolbar
 
 function render(){
   const tk=PRICES[team]||[];
@@ -434,7 +427,8 @@ chart.subscribeClick((param)=>{
 
 // crosshair: hover card on a game column + price readout
 chart.subscribeCrosshairMove((param)=>{
-  if(param.point&&param.time!=null&&periods.length){
+  if(zoomedIn){hideTip(true);}   // already zoomed in → no game popup, only the zoom-out button
+  else if(param.point&&param.time!=null&&periods.length){
     // nearest game within ±12h of the cursor → show its guide line + popup
     const t=param.time;let idx=-1,best=Infinity;
     for(let i=0;i<periods.length;i++){const dd=Math.abs(periods[i].bt-t);if(dd<best){best=dd;idx=i;}}
@@ -473,9 +467,11 @@ document.getElementById('btn-next').onclick=focusNextGame;
 const zoomOutBtn=document.getElementById('zoomout');
 function updateZoomOutVis(){
   const r=chart.timeScale().getVisibleLogicalRange();
-  if(!r||!bars.length){zoomOutBtn.style.display='none';return;}
+  if(!r||!bars.length){zoomedIn=false;zoomOutBtn.style.display='none';return;}
   const defBars=Math.min(bars.length,Math.round(14*86400/resSec()));
-  zoomOutBtn.style.display=((r.to-r.from)<defBars*0.85)?'inline-flex':'none';
+  zoomedIn=(r.to-r.from)<defBars*0.85;
+  zoomOutBtn.style.display=zoomedIn?'inline-flex':'none';
+  if(zoomedIn)hideTip(true);   // while zoomed in: no game popups, just the zoom-out button
 }
 chart.timeScale().subscribeVisibleLogicalRangeChange(updateZoomOutVis);
 zoomOutBtn.onclick=()=>{selIdx=-1;hideTip(true);syncStripSel();updateReadout();zoomDefault();updateZoomOutVis();};
