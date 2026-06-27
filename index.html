@@ -118,9 +118,11 @@
 
   <div id="toolbar">
     <div class="group left">
-      <div class="group" style="background:var(--bg-primary);border-radius:4px;padding:2px;">
-        <button class="tool active-green" id="btn-candle" title="Candlestick"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 5v4M9 15v4M7 9h4v6H7zM17 3v4M17 17v4M15 7h4v10h-4z"/></svg></button>
-        <button class="tool" id="btn-line" title="Line"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 17l6-6 4 4 8-8"/></svg></button>
+      <div class="group" id="ctype">
+        <button class="tool tf ctab" data-t="step" title="Step line (truest for a step-function price)">Step</button>
+        <button class="tool tf ctab" data-t="line" title="Line">Line</button>
+        <button class="tool tf ctab" data-t="area" title="Area">Area</button>
+        <button class="tool tf ctab active-green" data-t="candle" title="Candlesticks">Bars</button>
       </div>
       <div class="group" id="tf-group"></div>
       <button class="tool active-green tf" id="btn-games" title="Win/loss circles">● Games</button>
@@ -136,7 +138,7 @@
 
 <script>
 const LWC = window.LightweightCharts;
-const { createChart, ColorType, CandlestickSeries, LineSeries, createSeriesMarkers } = LWC;
+const { createChart, ColorType, CandlestickSeries, LineSeries, AreaSeries, LineType } = LWC;
 
 const TF=[{value:"15",label:"15m",seconds:900},{value:"60",label:"1h",seconds:3600},{value:"360",label:"6h",seconds:21600},{value:"1440",label:"1D",seconds:86400}];
 const MAX_GAP=8;
@@ -197,12 +199,13 @@ const chart=createChart(chartEl,{
   rightPriceScale:{borderColor:"rgba(42,48,56,1)"},
   timeScale:{borderColor:"rgba(42,48,56,1)",timeVisible:true,secondsVisible:false,barSpacing:12,minBarSpacing:0.5,rightBarStaysOnScroll:true},
 });
-const candle=chart.addSeries(CandlestickSeries,{upColor:"#B2ED68",downColor:"#B30F43",borderVisible:false,wickUpColor:"#B2ED68",wickDownColor:"#B30F43"});
-// pull the win/loss targets into the price-axis autoscale when they're near the visible candles (so the corridor is fully framed)
-candle.applyOptions({autoscaleInfoProvider:(orig)=>{const res=orig();if(res&&res.priceRange&&curWin!=null&&curLoss!=null){const r=res.priceRange,h=(r.maxValue-r.minValue)||1;
+// pull the win/loss targets into the price-axis autoscale when near the visible range (so the corridor is fully framed)
+const autoscaleProv=(orig)=>{const res=orig();if(res&&res.priceRange&&curWin!=null&&curLoss!=null){const r=res.priceRange,h=(r.maxValue-r.minValue)||1;
   if(curWin<=r.maxValue+h&&curWin>=r.minValue-h)r.maxValue=Math.max(r.maxValue,curWin);
-  if(curLoss>=r.minValue-h&&curLoss<=r.maxValue+h)r.minValue=Math.min(r.minValue,curLoss);}return res;}});
-const line=chart.addSeries(LineSeries,{color:"#B2ED68",lineWidth:2});line.applyOptions({visible:false});
+  if(curLoss>=r.minValue-h&&curLoss<=r.maxValue+h)r.minValue=Math.min(r.minValue,curLoss);}return res;};
+const candle=chart.addSeries(CandlestickSeries,{upColor:"#B2ED68",downColor:"#B30F43",borderVisible:false,wickUpColor:"#B2ED68",wickDownColor:"#B30F43",autoscaleInfoProvider:autoscaleProv});
+const line=chart.addSeries(LineSeries,{color:"#B2ED68",lineWidth:2,autoscaleInfoProvider:autoscaleProv});line.applyOptions({visible:false});
+const area=chart.addSeries(AreaSeries,{lineColor:"#B2ED68",lineWidth:2,topColor:"rgba(178,237,104,0.28)",bottomColor:"rgba(178,237,104,0.02)",autoscaleInfoProvider:autoscaleProv});area.applyOptions({visible:false});
 // Inter-game window: 2 dividers from the PREVIOUS game's settlement to the NEXT game's
 // projected settlement, framing a cyan band, with win/loss target rails across it.
 function makeTargets(){
@@ -250,7 +253,22 @@ function makeTargets(){
     setData(x){d=x;if(api&&api.requestUpdate)api.requestUpdate();}};
 }
 
-const markersPrimitive=createSeriesMarkers(candle,[]);
+// win/loss dots as a primitive (so they render under ANY chart type, not just candles)
+function makeDots(){
+  let api=null,ds=[];
+  const draw=(target)=>{ if(!api)return; target.useBitmapCoordinateSpace(scope=>{
+    const ctx=scope.context,hpr=scope.horizontalPixelRatio,vpr=scope.verticalPixelRatio,ts=api.chart.timeScale(),series=api.series;
+    ctx.save();const r=4*hpr;
+    for(const d of ds){const x=ts.timeToCoordinate(d.t);if(x===null)continue;const yc=series.priceToCoordinate(d.won?d.low:d.high);if(yc===null)continue;
+      const xb=x*hpr,yb=d.won?(yc*vpr+11*vpr):(yc*vpr-11*vpr);
+      ctx.fillStyle=d.won?'#B2ED68':'#D4135A';ctx.beginPath();ctx.arc(xb,yb,r,0,6.3);ctx.fill();
+      if(d.label){ctx.font=`${9*hpr}px ui-monospace, Menlo, monospace`;ctx.fillStyle='rgba(150,158,170,0.95)';ctx.textAlign='center';ctx.textBaseline=d.won?'top':'bottom';ctx.fillText(d.label,xb,d.won?yb+6*vpr:yb-6*vpr);}}
+    ctx.restore();});};
+  const view={renderer(){return {draw};},zOrder(){return 'top';}};
+  return {attached(p){api=p;},detached(){api=null;},updateAllViews(){},paneViews(){return [view];},
+    setDots(d){ds=d;if(api&&api.requestUpdate)api.requestUpdate();}};
+}
+const dots=makeDots();candle.attachPrimitive(dots);
 const vlines=makeVLines();candle.attachPrimitive(vlines);
 const targets=makeTargets();candle.attachPrimitive(targets);
 
@@ -291,15 +309,10 @@ function stats(t){
 }
 
 function buildMarkers(){
-  const markers=[];
-  if(showGames){
-    for(const pr of periods){const g=pr.game;
-      markers.push({time:pr.bt,position:g.won?'belowBar':'aboveBar',color:g.won?'#B2ED68':'#D4135A',
-        shape:'circle',size:showDetails?1:0.8,
-        text:showDetails?`${g.won?'W':'L'} ${g.ts}-${g.os} ${g.home?'v':'@'}${ab(g.opp)}`:''});}
-  }
-  markers.sort((a,b)=>a.time-b.time);
-  markersPrimitive.setMarkers(markers);
+  const ds=[];
+  if(showGames){for(const pr of periods){const b=bars.find(x=>x.time===pr.bt);if(!b)continue;const g=pr.game;
+    ds.push({t:pr.bt,won:g.won,low:b.low,high:b.high,label:showDetails?`${g.won?'W':'L'} ${g.ts}-${g.os} ${g.home?'v':'@'}${ab(g.opp)}`:''});}}
+  dots.setDots(ds);
   vlines.setEntries(showLines?periods.map(p=>({t:p.bt,won:p.game.won,opp:(p.game.home?'v':'@')+ab(p.game.opp),date:dayfmt(p.game.gt||p.game.t)})):[]);
 }
 
@@ -340,7 +353,8 @@ function render(){
     if(endT>lastT)for(let tt=lastT+sec;tt<=endT+3*sec;tt+=sec)ohlc.push({time:tt});}
   seriesLogicalCount=ohlc.length;
   candle.setData(ohlc);
-  if(chartType==='line')line.setData(bars.map(c=>({time:c.time,value:c.close})));
+  const closes=bars.map(c=>({time:c.time,value:c.close}));
+  line.setData(closes);area.setData(closes);
   const s=stats(team);
 
   // build periods (games within price history), snap to bucket
@@ -442,8 +456,12 @@ chart.subscribeCrosshairMove((param)=>{
 
 // toolbar
 const bC=document.getElementById('btn-candle'),bL=document.getElementById('btn-line');
-function setType(t){chartType=t;candle.applyOptions({visible:t==='candle'});if(t==='line')line.setData(bars.map(c=>({time:c.time,value:c.close})));line.applyOptions({visible:t==='line'});bC.className='tool'+(t==='candle'?' active-green':'');bL.className='tool'+(t==='line'?' active-cyan':'');}
-bC.onclick=()=>setType('candle');bL.onclick=()=>setType('line');
+function setType(t){chartType=t;
+  candle.applyOptions({visible:t==='candle'});
+  line.applyOptions({visible:t==='line'||t==='step',lineType:(t==='step'?LineType.WithSteps:LineType.Simple)});
+  area.applyOptions({visible:t==='area'});
+  document.querySelectorAll('#ctype .ctab').forEach(b=>b.className='tool tf ctab'+(b.dataset.t===t?' active-green':''));}
+document.querySelectorAll('#ctype .ctab').forEach(b=>b.onclick=()=>setType(b.dataset.t));
 const tfg=document.getElementById('tf-group');
 TF.forEach(o=>{const b=document.createElement('button');b.className='tool tf'+(o.value===resolution?' active-green':'');b.textContent=o.label;b.dataset.res=o.value;
   b.onclick=()=>{resolution=o.value;[...tfg.children].forEach(c=>c.className='tool tf'+(c.dataset.res===resolution?' active-green':''));render();};tfg.appendChild(b);});
