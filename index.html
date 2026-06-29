@@ -85,7 +85,6 @@
   .tip-pct.up{color:var(--green);}.tip-pct.down{color:var(--red-light);}
   .tip-btns{display:flex;gap:5px;}
   .tip-btns button{height:29px;background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-secondary);border-radius:7px;font:inherit;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;transition:all .12s;}
-  .tip-btns button.nav{width:31px;flex:0 0 auto;}
   .tip-btns button.zoom{flex:1;color:var(--cyan);font-weight:500;}
   .tip-btns button:hover:not(:disabled){border-color:var(--text-muted);color:var(--text-primary);background:var(--bg-hover);}
   .tip-btns button.zoom:hover{border-color:var(--cyan);background:rgba(0,217,245,.1);}
@@ -444,9 +443,7 @@ function positionTip(idx){const pr=periods[idx];
   }
 }
 function showTip(idx){if(idx<0||idx>=periods.length)return;tipIdx=idx;tip.className=periods[idx].game.won?'w':'l';tip.innerHTML=tipHTML(idx);tip.style.display='block';
-  tip.querySelectorAll('button').forEach(b=>b.onclick=(e)=>{e.stopPropagation();const a=b.dataset.a;
-    let n=idx;if(a==='prev')n=idx-1;else if(a==='next')n=idx+1;
-    if(n<0||n>=periods.length)return;selectGame(n,true);requestAnimationFrame(()=>showTip(n));});
+  tip.querySelector('button.zoom').onclick=(e)=>{e.stopPropagation();selectGame(idx,true);};
   cancelHide();positionTip(idx);
   if(showLines){const ce=idx<periods.length-1?periods[idx].end:null;vlines.setHoverCorridor(periods[idx].bt,ce);}
   else vlines.setHoverCorridor(null,null);
