@@ -164,20 +164,23 @@ function jumpAt(ticks,t){let lo=0,hi=ticks.length-1,i=-1;while(lo<=hi){const m=(
 
 // ── vertical game-divider primitive ──
 function makeVLines(){
-  let api=null,entries=[],hoverStart=null,hoverEnd=null;
-  // corridor fill + two walls (left = settled game, right = next game), only when hovering
-  const drawGuides=(target)=>{ if(!api||hoverStart==null)return; target.useBitmapCoordinateSpace(scope=>{
+  let api=null,entries=[],hoverStart=null,hoverEnd=null,pinStart=null,pinEnd=null;
+  // corridor fill + two walls (left = settled game, right = next game).
+  // Hover corridor takes precedence; otherwise the pinned corridor (the zoomed-in game) stays drawn.
+  const drawGuides=(target)=>{ if(!api)return;
+    const start=hoverStart!=null?hoverStart:pinStart, end=hoverStart!=null?hoverEnd:pinEnd;
+    if(start==null)return; target.useBitmapCoordinateSpace(scope=>{
     const ctx=scope.context,hpr=scope.horizontalPixelRatio,h=scope.bitmapSize.height,ts=api.chart.timeScale();
     ctx.save();
     // tinted corridor fill between the two walls
-    if(hoverEnd!=null){const x1=ts.timeToCoordinate(hoverStart),x2=ts.timeToCoordinate(hoverEnd);
+    if(end!=null){const x1=ts.timeToCoordinate(start),x2=ts.timeToCoordinate(end);
       if(x1!=null&&x2!=null){ctx.fillStyle='rgba(0,217,245,0.045)';ctx.fillRect(Math.round(x1*hpr),0,Math.round((x2-x1)*hpr),h);}}
     // left wall — solid (the game that just settled)
-    const xl=ts.timeToCoordinate(hoverStart);
+    const xl=ts.timeToCoordinate(start);
     if(xl!=null){const xb=Math.round(xl*hpr)+0.5;ctx.setLineDash([]);ctx.lineWidth=Math.max(1,Math.round(hpr));
       ctx.strokeStyle='rgba(236,238,242,0.55)';ctx.beginPath();ctx.moveTo(xb,0);ctx.lineTo(xb,h);ctx.stroke();}
     // right wall — dashed (next game's settlement)
-    if(hoverEnd!=null){const xr=ts.timeToCoordinate(hoverEnd);
+    if(end!=null){const xr=ts.timeToCoordinate(end);
       if(xr!=null){const xb=Math.round(xr*hpr)+0.5;ctx.setLineDash([4*hpr,3*hpr]);ctx.lineWidth=Math.max(1,Math.round(hpr));
         ctx.strokeStyle='rgba(236,238,242,0.35)';ctx.beginPath();ctx.moveTo(xb,0);ctx.lineTo(xb,h);ctx.stroke();}}
     ctx.restore();});};
@@ -195,7 +198,8 @@ function makeVLines(){
   const flagView={renderer(){return {draw:drawFlags};},zOrder(){return 'top';}};
   return {attached(p){api=p;},detached(){api=null;},updateAllViews(){},paneViews(){return [guideView,flagView];},
     setEntries(e){entries=e;if(api&&api.requestUpdate)api.requestUpdate();},
-    setHoverCorridor(s,e){if(hoverStart!==s||hoverEnd!==e){hoverStart=s;hoverEnd=e;if(api&&api.requestUpdate)api.requestUpdate();}}};
+    setHoverCorridor(s,e){if(hoverStart!==s||hoverEnd!==e){hoverStart=s;hoverEnd=e;if(api&&api.requestUpdate)api.requestUpdate();}},
+    setPinnedCorridor(s,e){if(pinStart!==s||pinEnd!==e){pinStart=s;pinEnd=e;if(api&&api.requestUpdate)api.requestUpdate();}}};
 }
 
 const chartEl=document.getElementById('chart');
@@ -339,11 +343,14 @@ function syncStripSel(){[...document.querySelectorAll('.chip')].forEach(c=>{
   const sc=document.querySelector('.chip.sel');if(sc&&selIdx>=0)sc.scrollIntoView({block:'nearest',inline:'center'});
 }
 function selectGame(i,zoom){selIdx=i;syncStripSel();updateReadout();
-  if(zoom){setNextActive(false);hideTip(true);const pr=periods[i];const pad=6*3600;chart.timeScale().setVisibleRange({from:pr.start-pad,to:pr.end+pad});}}
+  if(zoom){setNextActive(false);hideTip(true);const pr=periods[i];const pad=6*3600;chart.timeScale().setVisibleRange({from:pr.start-pad,to:pr.end+pad});
+    // keep the zoomed-in game's corridor framed (walls + tint) while zoomed
+    if(showLines){const ce=i<periods.length-1?pr.end:null;vlines.setPinnedCorridor(pr.bt,ce);}else vlines.setPinnedCorridor(null,null);}}
 
 function zoomDefault(){const sec=resSec();const defBars=Math.min(bars.length,Math.round(14*86400/sec));
   const right=Math.max(bars.length-1,seriesLogicalCount-1); // include future whitespace (next-game band)
   const left=Math.max(0,bars.length-defBars);
+  vlines.setPinnedCorridor(null,null);   // overview → no pinned corridor
   if(right>left)chart.timeScale().setVisibleLogicalRange({from:left,to:right});
   else chart.timeScale().fitContent();}
 
@@ -493,12 +500,12 @@ TF.forEach(o=>{const b=document.createElement('button');b.className='tool tf'+(o
 const tog=(id,get,set)=>{const b=document.getElementById(id);b.onclick=()=>{set(!get());b.className='tool tf'+(get()?' active-green':'');buildMarkers();};return b;};
 tog('btn-games',()=>showGames,v=>showGames=v);
 const bD=document.getElementById('btn-details');bD.onclick=()=>{showDetails=!showDetails;bD.className='tool tf'+(showDetails?' active-green':'');buildMarkers();};
-tog('btn-lines',()=>showLines,v=>showLines=v);
+const bLn=document.getElementById('btn-lines');bLn.onclick=()=>{showLines=!showLines;bLn.className='tool tf'+(showLines?' active-green':'');if(!showLines){vlines.setHoverCorridor(null,null);vlines.setPinnedCorridor(null,null);}else if(selIdx>=0){const pr=periods[selIdx];vlines.setPinnedCorridor(pr.bt,selIdx<periods.length-1?pr.end:null);}buildMarkers();};
 const bS=document.getElementById('btn-setup');bS.onclick=()=>{showSetup=!showSetup;bS.className='tool tf'+(showSetup?' active-green':'');applyTargets();};
 function focusNextGame(){
   const nx=NEXT[team]; if(!nx||!bars.length) return;
   if(!showSetup){showSetup=true;bS.className='tool tf active-green';applyTargets();} // ensure the corridor is visible
-  selIdx=-1;hideTip(true);syncStripSel();updateReadout();
+  selIdx=-1;hideTip(true);syncStripSel();updateReadout();vlines.setPinnedCorridor(null,null);
   const sec=resSec();
   const ns=Math.floor((nx.t+NEXT_SETTLE_OFFSET)/sec)*sec;
   const ps=periods.length?periods[periods.length-1].bt:bars[bars.length-1].time;
