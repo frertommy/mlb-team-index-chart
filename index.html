@@ -175,14 +175,14 @@ function makeVLines(){
     // tinted corridor fill between the two walls
     if(end!=null){const x1=ts.timeToCoordinate(start),x2=ts.timeToCoordinate(end);
       if(x1!=null&&x2!=null){ctx.fillStyle='rgba(0,217,245,0.045)';ctx.fillRect(Math.round(x1*hpr),0,Math.round((x2-x1)*hpr),h);}}
-    // left wall — solid (the game that just settled)
+    // left wall — solid blue (the game that just settled)
     const xl=ts.timeToCoordinate(start);
     if(xl!=null){const xb=Math.round(xl*hpr)+0.5;ctx.setLineDash([]);ctx.lineWidth=Math.max(1,Math.round(hpr));
-      ctx.strokeStyle='rgba(236,238,242,0.55)';ctx.beginPath();ctx.moveTo(xb,0);ctx.lineTo(xb,h);ctx.stroke();}
-    // right wall — dashed (next game's settlement)
+      ctx.strokeStyle='rgba(0,217,245,0.85)';ctx.beginPath();ctx.moveTo(xb,0);ctx.lineTo(xb,h);ctx.stroke();}
+    // right wall — solid blue (next game's settlement)
     if(end!=null){const xr=ts.timeToCoordinate(end);
-      if(xr!=null){const xb=Math.round(xr*hpr)+0.5;ctx.setLineDash([4*hpr,3*hpr]);ctx.lineWidth=Math.max(1,Math.round(hpr));
-        ctx.strokeStyle='rgba(236,238,242,0.35)';ctx.beginPath();ctx.moveTo(xb,0);ctx.lineTo(xb,h);ctx.stroke();}}
+      if(xr!=null){const xb=Math.round(xr*hpr)+0.5;ctx.setLineDash([]);ctx.lineWidth=Math.max(1,Math.round(hpr));
+        ctx.strokeStyle='rgba(0,217,245,0.85)';ctx.beginPath();ctx.moveTo(xb,0);ctx.lineTo(xb,h);ctx.stroke();}}
     ctx.restore();});};
   // top pennants — small win/loss flags at the top of every divider
   const drawFlags=(target)=>{ if(!api)return; target.useBitmapCoordinateSpace(scope=>{
